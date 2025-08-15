@@ -3,91 +3,122 @@
 {% block content %}
 <p><a href="/">← Back to list</a></p>
 <article class="card movie-detail-layout">
-  <div class="poster-column">
-    {% if movie.poster %}
-      <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
-    {% endif %}
-  </div>
-  <div class="details-column">
-    <h2>{{ movie.title }} ({{ movie.release_year }})</h2>
-    <div class="genres mb-3">
-        {% for genre in movie.genres.all %}
-            {{ genre.name }}{% if not forloop.last %} &bull; {% endif %}
+    <div class="poster-column">
+        {% if movie.poster %}
+              <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
+            {% endif %}
+        </div>
+        <div class="details-column">
+            <h2>{{ movie.title }} ({{ movie.release_year }})</h2>
+            <div class="genres mb-3">
+                {% for genre in movie.genres.all %}
+                    {{ genre.name }}{% if not forloop.last %} &bull; {% endif %}
+                {% endfor %}
+            </div>
+            <p><strong>Overview:</strong> {{ movie.description }}</p>
+            <p><strong>Director:</strong> {{ movie.director.first_name }} {{ movie.director.last_name }}</p>
+            <p><strong>Main actors:</strong>
+              {% for a in movie.main_actors.all %}
+                {{ a.first_name }} {{ a.last_name }}{% if not forloop.last %}, {% endif %}
+              {% empty %}—{% endfor %}
+            </p>
+            {% if average_rating %}
+              <p><strong>Average Rating:</strong> {{ average_rating|floatformat:1 }} / 5.0</p>
+            {% endif %}
+        </div>
+    </article>
+
+    {% if user.is_authenticated %}
+    <div class="user-feedback-section mb-4">
+      <h4>Your Feedback</h4>
+      
+      {% if messages %}
+        {% for message in messages %}
+            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
         {% endfor %}
-    </div>
-    <p><strong>Overview:</strong> {{ movie.description }}</p>
-    <p><strong>Director:</strong> {{ movie.director.first_name }} {{ movie.director.last_name }}</p>
-    <p><strong>Main actors:</strong>
-      {% for a in movie.main_actors.all %}
-        {{ a.first_name }} {{ a.last_name }}{% if not forloop.last %}, {% endif %}
-      {% empty %}—{% endfor %}
-    </p>
-    {% if average_rating %}
-      <p><strong>Average Rating:</strong> {{ average_rating|floatformat:1 }} / 5.0</p>
-    {% endif %}
-  </div>
-</article>
-
-{% if user.is_authenticated %}
-<div class="user-feedback-section mb-4">
-  <h4>Your Feedback</h4>
-  
-  {% if messages %}
-    {% for message in messages %}
-        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
-
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5 class="card-title">Your Rating</h5>
-      <form method="post" class="rating-form">
-        {% csrf_token %}
-        <div class="star-rating">
-          {% for i in "54321"|make_list %}
-            <button type="submit" name="score" value="{{ i }}" class="star {% if user_rating and user_rating.score >= i|add:0 %}rated{% endif %}">&#9733;</button>
-          {% endfor %}
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div class="card mb-3">
-    <div class="card-body">
-      {% if user_review %}
-        <h5 class="card-title">Your Review</h5>
-        <p>You have already submitted a review for this movie. Thank you for your feedback! <a href="#review-{{ user_review.id }}">Jump to your review.</a></p>
-      {% else %}
-        <h5 class="card-title">Write a Review</h5>
-        <form method="post">
-          {% csrf_token %}
-          {{ form.as_p }}
-          <button type="submit" name="review_submit" value="1" class="btn btn-primary mt-3">Submit Review</button>
-        </form>
       {% endif %}
-    </div>
-  </div>
-</div>
 
-{% endif %}
-
-<div class="reviews-section mt-5">
-  <h4>Community Reviews</h4>
-
-  {% if not user.is_authenticated and not reviews %}
-    <p><a href="{% url 'accounts:user_login' %}?next={{ request.path }}">Log in</a> to be the first to rate or write a review.</p>
-  {% elif not reviews %}
-     <p>No reviews yet. Be the first to write one!</p>
-  {% endif %}
-
-  {% for review in reviews %}
-    <div class="review card mb-3" id="review-{{ review.id }}">
-        <div class="card-body">
-            <h5 class="card-title">{{ review.title }}</h5>
-            <h6 class="card-subtitle mb-2 text-muted">By {{ review.user.username }} on {{ review.created_at|date:"F d, Y" }}</h6>
-            <p class="card-text">{{ review.body }}</p>
+      <div class="feedback-layout">
+        <div class="card mb-3 review-card">
+          <div class="card-body">
+            {% if user_review %}
+              <h5 class="card-title">Your Review</h5>
+              <p>You have already submitted a review for this movie. Thank you for your feedback! <a href="#review-{{ user_review.id }}">Jump to your review.</a></p>
+            {% else %}
+              <h5 class="card-title">Write a Review</h5>
+              <form method="post">
+                {% csrf_token %}
+                <div class="form-group">
+                  <label for="{{ form.title.id_for_label }}">Title <small class="text-muted">({{ form.title.help_text }})</small></label>
+                  {{ form.title }}
+                </div>
+                <div class="form-group mt-2">
+                   <label for="{{ form.body.id_for_label }}">{{ form.body.label }}</label>
+                   {{ form.body }}
+                </div>
+                <button type="submit" name="review_submit" value="1" class="btn btn-primary mt-3">Submit Review</button>
+              </form>
+            {% endif %}
+          </div>
         </div>
+
+        <div class="card mb-3 rating-card">
+          <div class="card-body">
+            <h5 class="card-title">Your Rating</h5>
+            <form method="post" class="rating-form">
+                {% csrf_token %}
+                <div class="star-rating">
+                {% for i in "54321"|make_list %}
+                    <button type="submit" name="score" value="{{ i }}" class="star {% if user_rating and user_rating.score >= i|add:0 %}rated{% endif %}">&#9733;</button>
+                {% endfor %}
+                </div>
+            </form>
+            {% if user_rating %}
+                <span class="rating-text">{{ user_rating.score }}/5</span>
+            {% else %}
+              <span class="rating-text">N/A</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="card mb-3 distribution-card">
+            <div class="card-body">
+                <h5 class="card-title">Rating Distribution</h5>
+                <div class="rating-poll">
+                    {% for score, percentage in distribution_data.items|slice:"::1" %}
+                    <div class="poll-row">
+                        <div class="poll-label">{{ score }} star</div>
+                        <div class="poll-bar-container">
+                            <div class="poll-bar" style="--poll-width: {{ percentage }}%;"></div>
+                        </div>
+                        <div class="poll-percentage">{{ percentage|floatformat:0 }}%</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+       </div>
+     
+     {% endif %}
+
+    <div class="reviews-section mt-5">
+      <h4>Community Reviews</h4>
+
+      {% if not user.is_authenticated and not reviews %}
+        <p><a href="{% url 'accounts:user_login' %}?next={{ request.path }}">Log in</a> to be the first to rate or write a review.</p>
+      {% elif not reviews %}
+         <p>No reviews yet. Be the first to write one!</p>
+      {% endif %}
+
+      {% for review in reviews %}
+        <div class="review card mb-3" id="review-{{ review.id }}">
+            <div class="card-body">
+                <h5 class="card-title">{{ review.title }}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">By {{ review.user.username }} on {{ review.created_at|date:"F d, Y" }}</h6>
+                <p class="card-text">{{ review.body }}</p>
+            </div>
+        </div>
+      {% endfor %}
     </div>
-  {% endfor %}
 </div>
 {% endblock %}

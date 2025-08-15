@@ -4,10 +4,15 @@ body {
 }
 
 header {
+    background-color: #f8f9fa;
+    padding: 1rem 0;
+    margin-bottom: 1rem;
+}
+
+.header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 1rem;
 }
 
 .grid {
@@ -33,11 +38,18 @@ a {
     color: #222;
 }
 
+.container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
 /* Star Rating Styles */
 .star-rating {
     display: flex;
     flex-direction: row-reverse; /* This is key for the hover effect */
-    justify-content: flex-end;
+    justify-content: center;
+    margin-top: 1rem;
 }
 
 .star-rating button.star {
@@ -59,6 +71,13 @@ a {
     color: gold;
 }
 
+.rating-text {
+    font-size: 4rem;
+    font-weight: 200;
+    margin-top: 2rem;
+    color: #ced4da;
+}
+
 /* Movie Detail Layout */
 @media (min-width: 768px) {
     .movie-detail-layout {
@@ -68,10 +87,91 @@ a {
 
     .movie-detail-layout .poster-column {
         flex-shrink: 0; /* Prevents the poster from shrinking */
-        /* width: 300px;  */
+        width: 300px; 
     }
 
     .movie-detail-layout .details-column {
         flex-grow: 1; /* Allows the details to take up the remaining space */
     }
+}
+
+/* Feedback Layout */
+@media (min-width: 768px) {
+    .feedback-layout {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 1.5rem;
+    }
+}
+
+/* Rating Poll Styles */
+.rating-poll {
+    font-size: 0.875rem;
+}
+
+.poll-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.poll-label {
+    flex: 0 0 50px;
+}
+
+.poll-bar-container {
+    flex-grow: 1;
+    background-color: #e9ecef;
+    border-radius: 4px;
+    margin: 0 0.5rem;
+}
+
+.poll-bar {
+    background-color: #6c757d;
+    height: 10px;
+    border-radius: 4px;
+    width: var(--poll-width, 0%);
+}
+
+.poll-percentage {
+    flex: 0 0 35px;
+    text-align: right;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box; /* Important for width calculation */
+}
+
+/* Center Rating Card Content */
+.rating-card .card-body {
+    text-align: center;
+}
+
+.review-card .card-body {
+    text-align: left;
+}
+
+.rating-card .card-body,
+.distribution-card .card-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-body h5 {
+    margin-top: 0;
 }

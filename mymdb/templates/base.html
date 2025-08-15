@@ -9,16 +9,20 @@
 </head>
 <body>
 <header>
-  <h1><a href="/">MyMDB</a></h1>
-  <div>
-    {% if user.is_authenticated %}
-      Welcome, {{ user.username }} |
-      <a href="{% url 'accounts:user_logout' %}">Logout</a>
-    {% else %}
-      <a href="{% url 'accounts:user_login' %}">Login</a> · <a href="{% url 'accounts:user_signup' %}">Sign up</a>
-    {% endif %}
+  <div class="container header-content">
+    <h1><a href="/">MyMDB</a></h1>
+    <div>
+      {% if user.is_authenticated %}
+        Welcome, {{ user.username }} |
+        <a href="{% url 'accounts:user_logout' %}">Logout</a>
+      {% else %}
+        <a href="{% url 'accounts:user_login' %}">Login</a> · <a href="{% url 'accounts:user_signup' %}">Sign up</a>
+      {% endif %}
+    </div>
   </div>
 </header>
-{% block content %}{% endblock %}
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
 </body>
 </html>

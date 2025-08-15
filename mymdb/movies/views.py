@@ -8,7 +8,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from django.shortcuts import render, get_object_or_404, redirect
 from .models import Movie, Genre, Director, Actor, Review, Rating
 from django.core.paginator import Paginator
-from django.db.models import Avg
+from django.db.models import Avg, Count
 from urllib.parse import urlencode
 from .forms import ReviewForm
 from django.contrib import messages
@@ -58,7 +58,18 @@ def movie_details(request, pk):
         pk=pk
     )
     reviews = Review.objects.filter(movie=movie).select_related('user')
-    average_rating = Rating.objects.filter(movie=movie).aggregate(Avg('score'))['score__avg']
+    
+    # Rating calculations
+    all_ratings = Rating.objects.filter(movie=movie)
+    average_rating = all_ratings.aggregate(Avg('score'))['score__avg']
+    
+    # Rating distribution calculation
+    rating_distribution = all_ratings.values('score').annotate(count=Count('score')).order_by('-score')
+    total_ratings = all_ratings.count()
+    
+    distribution_data = {i: 0 for i in range(1, 6)}
+    for item in rating_distribution:
+        distribution_data[item['score']] = (item['count'] / total_ratings) * 100 if total_ratings > 0 else 0
 
     user_rating = None
     user_review = None
@@ -100,6 +111,7 @@ def movie_details(request, pk):
         'form': form,
         'user_rating': user_rating,
         'user_review': user_review,
+        'distribution_data': distribution_data,
     })
 
 def split_name(fullname: str) -> tuple[str, str]:
