@@ -5,10 +5,14 @@ from django.http import JsonResponse
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAdminUser
 from rest_framework.parsers import JSONParser, MultiPartParser
-from django.shortcuts import render, get_object_or_404
-from .models import Movie, Genre, Director, Actor
+from django.shortcuts import render, get_object_or_404, redirect
+from .models import Movie, Genre, Director, Actor, Review, Rating
 from django.core.paginator import Paginator
+from django.db.models import Avg
 from urllib.parse import urlencode
+from .forms import ReviewForm
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 
 SORTS = {
     "title_asc": "title",
@@ -54,7 +58,50 @@ def movie_details(request, pk):
         Movie.objects.select_related('director').prefetch_related('main_actors'),
         pk=pk
     )
-    return render(request, 'movies/movie_details.html', {'movie': movie})
+    reviews = Review.objects.filter(movie=movie).select_related('user')
+    average_rating = Rating.objects.filter(movie=movie).aggregate(Avg('score'))['score__avg']
+
+    user_rating = None
+    user_review = None
+    if request.user.is_authenticated:
+        user_rating = Rating.objects.filter(movie=movie, user=request.user).first()
+        user_review = Review.objects.filter(movie=movie, user=request.user).first()
+
+    if request.method == 'POST' and request.user.is_authenticated:
+        # Check which form was submitted
+        if 'score' in request.POST:
+            score = request.POST.get('score')
+            Rating.objects.update_or_create(
+                user=request.user, movie=movie,
+                defaults={'score': score}
+            )
+            messages.success(request, 'Your rating has been submitted.')
+            return redirect('movies:movie_details', pk=movie.pk)
+
+        elif 'review_submit' in request.POST:
+            if user_review:
+                messages.error(request, 'You have already submitted a review for this movie.')
+                return redirect('movies:movie_details', pk=movie.pk)
+
+            form = ReviewForm(request.POST) # This is a new submission
+            if form.is_valid():
+                review = form.save(commit=False)
+                review.user = request.user
+                review.movie = movie
+                review.save()
+                messages.success(request, 'Your review has been submitted.')
+                return redirect('movies:movie_details', pk=movie.pk)
+    else:
+        form = ReviewForm() # Always a blank form for GET
+
+    return render(request, 'movies/movie_details.html', {
+        'movie': movie,
+        'reviews': reviews,
+        'average_rating': average_rating,
+        'form': form,
+        'user_rating': user_rating,
+        'user_review': user_review,
+    })
 
 def split_name(fullname: str) -> tuple[str, str]:
     parts = (fullname or "").strip().split()

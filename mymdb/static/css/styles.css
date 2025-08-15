@@ -32,3 +32,29 @@ a {
     text-decoration: none;
     color: #222;
 }
+
+/* Star Rating Styles */
+.star-rating {
+    display: flex;
+    flex-direction: row-reverse; /* This is key for the hover effect */
+    justify-content: flex-end;
+}
+
+.star-rating button.star {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 2rem;
+    color: #ddd;
+    padding: 0 0.1em;
+    transition: color 0.2s;
+}
+
+.star-rating button.star:hover,
+.star-rating button.star:hover ~ button.star {
+    color: gold;
+}
+
+.star-rating button.star.rated {
+    color: gold;
+}

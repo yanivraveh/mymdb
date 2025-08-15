@@ -8,11 +8,77 @@
   <h2>{{ movie.title }} ({{ movie.release_year }})</h2>
   <p>{{ movie.description }}</p>
   <p><strong>Director:</strong> {{ movie.director.first_name }} {{ movie.director.last_name }}</p>
-  <p><strong>Main actors (up to 4):</strong>
+  <p><strong>Main actors:</strong>
     {% for a in movie.main_actors.all %}
       {{ a.first_name }} {{ a.last_name }}{% if not forloop.last %}, {% endif %}
     {% empty %}—{% endfor %}
   </p>
+  {% if average_rating %}
+    <p><strong>Average Rating:</strong> {{ average_rating|floatformat:1 }} / 5.0</p>
+  {% endif %}
   <p><a href="/">← Back to list</a></p>
 </article>
+
+{% if user.is_authenticated %}
+<div class="user-feedback-section mb-4">
+  <h4>Your Feedback</h4>
+  
+  {% if messages %}
+    {% for message in messages %}
+        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <h5 class="card-title">Your Rating</h5>
+      <form method="post" class="rating-form">
+        {% csrf_token %}
+        <div class="star-rating">
+          {% for i in "54321"|make_list %}
+            <button type="submit" name="score" value="{{ i }}" class="star {% if user_rating and user_rating.score >= i|add:0 %}rated{% endif %}">&#9733;</button>
+          {% endfor %}
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      {% if user_review %}
+        <h5 class="card-title">Your Review</h5>
+        <p>You have already submitted a review for this movie. Thank you for your feedback! <a href="#review-{{ user_review.id }}">Jump to your review.</a></p>
+      {% else %}
+        <h5 class="card-title">Write a Review</h5>
+        <form method="post">
+          {% csrf_token %}
+          {{ form.as_p }}
+          <button type="submit" name="review_submit" value="1" class="btn btn-primary mt-3">Submit Review</button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endif %}
+
+<div class="reviews-section mt-5">
+  <h4>Community Reviews</h4>
+
+  {% if not user.is_authenticated and not reviews %}
+    <p><a href="{% url 'accounts:user_login' %}?next={{ request.path }}">Log in</a> to be the first to rate or write a review.</p>
+  {% elif not reviews %}
+     <p>No reviews yet. Be the first to write one!</p>
+  {% endif %}
+
+  {% for review in reviews %}
+    <div class="review card mb-3" id="review-{{ review.id }}">
+        <div class="card-body">
+            <h5 class="card-title">{{ review.title }}</h5>
+            <h6 class="card-subtitle mb-2 text-muted">By {{ review.user.username }} on {{ review.created_at|date:"F d, Y" }}</h6>
+            <p class="card-text">{{ review.body }}</p>
+        </div>
+    </div>
+  {% endfor %}
+</div>
 {% endblock %}
