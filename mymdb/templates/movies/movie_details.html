@@ -1,22 +1,31 @@
 {% extends "base.html" %}
 {% block title %}{{ movie.title }} · MyMDB{% endblock %}
 {% block content %}
-<article class="card">
-  {% if movie.poster %}
-    <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
-  {% endif %}
-  <h2>{{ movie.title }} ({{ movie.release_year }})</h2>
-  <p>{{ movie.description }}</p>
-  <p><strong>Director:</strong> {{ movie.director.first_name }} {{ movie.director.last_name }}</p>
-  <p><strong>Main actors:</strong>
-    {% for a in movie.main_actors.all %}
-      {{ a.first_name }} {{ a.last_name }}{% if not forloop.last %}, {% endif %}
-    {% empty %}—{% endfor %}
-  </p>
-  {% if average_rating %}
-    <p><strong>Average Rating:</strong> {{ average_rating|floatformat:1 }} / 5.0</p>
-  {% endif %}
-  <p><a href="/">← Back to list</a></p>
+<p><a href="/">← Back to list</a></p>
+<article class="card movie-detail-layout">
+  <div class="poster-column">
+    {% if movie.poster %}
+      <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
+    {% endif %}
+  </div>
+  <div class="details-column">
+    <h2>{{ movie.title }} ({{ movie.release_year }})</h2>
+    <div class="genres mb-3">
+        {% for genre in movie.genres.all %}
+            {{ genre.name }}{% if not forloop.last %} &bull; {% endif %}
+        {% endfor %}
+    </div>
+    <p><strong>Overview:</strong> {{ movie.description }}</p>
+    <p><strong>Director:</strong> {{ movie.director.first_name }} {{ movie.director.last_name }}</p>
+    <p><strong>Main actors:</strong>
+      {% for a in movie.main_actors.all %}
+        {{ a.first_name }} {{ a.last_name }}{% if not forloop.last %}, {% endif %}
+      {% empty %}—{% endfor %}
+    </p>
+    {% if average_rating %}
+      <p><strong>Average Rating:</strong> {{ average_rating|floatformat:1 }} / 5.0</p>
+    {% endif %}
+  </div>
 </article>
 
 {% if user.is_authenticated %}

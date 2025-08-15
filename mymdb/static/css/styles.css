@@ -58,3 +58,20 @@ a {
 .star-rating button.star.rated {
     color: gold;
 }
+
+/* Movie Detail Layout */
+@media (min-width: 768px) {
+    .movie-detail-layout {
+        display: flex;
+        gap: 1.5rem;
+    }
+
+    .movie-detail-layout .poster-column {
+        flex-shrink: 0; /* Prevents the poster from shrinking */
+        /* width: 300px;  */
+    }
+
+    .movie-detail-layout .details-column {
+        flex-grow: 1; /* Allows the details to take up the remaining space */
+    }
+}

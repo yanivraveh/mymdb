@@ -11,7 +11,6 @@ from django.core.paginator import Paginator
 from django.db.models import Avg
 from urllib.parse import urlencode
 from .forms import ReviewForm
-from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 
 SORTS = {
