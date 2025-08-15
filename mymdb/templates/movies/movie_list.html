@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Movies · MyMDB{% endblock %}
+
+{% block content %}
+
+<form method="get" class="toolbar" style="margin-bottom:1rem; display:flex; gap:.5rem;">
+  <label>Sort:</label>
+  <select name="sort" onchange="this.form.submit()">
+    <option value="newest"     {% if sort_key == "newest" %}selected{% endif %}>Newest</option>
+    <option value="title_asc"  {% if sort_key == "title_asc" %}selected{% endif %}>Title (A–Z)</option>
+    <option value="title_desc" {% if sort_key == "title_desc" %}selected{% endif %}>Title (Z–A)</option>
+    <option value="year_asc"   {% if sort_key == "year_asc" %}selected{% endif %}>Year (oldest)</option>
+    <option value="year_desc"  {% if sort_key == "year_desc" %}selected{% endif %}>Year (newest)</option>
+  </select>
+
+  {# preserve other filters later; page is intentionally omitted #}
+  {% if base_qs %}
+    {% for k,v in request.GET.items %}
+      {% if k != 'sort' and k != 'page' %}
+        <input type="hidden" name="{{ k }}" value="{{ v }}">
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+</form>
+
+<div class="grid">
+  {% for movie in movies %}
+    <a class="card" href="{% url 'movies:movie_details' movie.pk %}">
+      {% if movie.poster %}
+        <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
+      {% endif %}
+      <h3>{{ movie.title }}</h3>
+      <p>{{ movie.description|truncatechars:140 }}</p>
+      <small>{{ movie.release_year }} · Dir: {{ movie.director.first_name }} {{ movie.director.last_name }}</small>
+    </a>
+  {% empty %}
+    <p>No movies yet.</p>
+  {% endfor %}
+</div>
+
+<nav class="pagination" style="margin-top:1rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+  {% if page_obj.has_previous %}
+    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page=1">« First</a>
+    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.previous_page_number }}">‹ Prev</a>
+  {% endif %}
+
+  <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+  {% if page_obj.has_next %}
+    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.next_page_number }}">Next ›</a>
+    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Last »</a>
+  {% endif %}
+</nav>
+
+{% endblock %}

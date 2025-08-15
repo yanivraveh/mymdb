@@ -1,0 +1,25 @@
+# Python Byte-compiled files
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Database
+db.sqlite3
+
+# Uploaded media
+/mymdb/media/
+
+# Environment variables
+.env
+
+# IDE settings
+.idea/
+
+# Jupyter Notebook
+.ipynb_checkpoints/

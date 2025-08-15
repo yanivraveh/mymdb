@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ movie.title }} · MyMDB{% endblock %}
+{% block content %}
+<article class="card">
+  {% if movie.poster %}
+    <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
+  {% endif %}
+  <h2>{{ movie.title }} ({{ movie.release_year }})</h2>
+  <p>{{ movie.description }}</p>
+  <p><strong>Director:</strong> {{ movie.director.first_name }} {{ movie.director.last_name }}</p>
+  <p><strong>Main actors (up to 4):</strong>
+    {% for a in movie.main_actors.all %}
+      {{ a.first_name }} {{ a.last_name }}{% if not forloop.last %}, {% endif %}
+    {% empty %}—{% endfor %}
+  </p>
+  <p><a href="/">← Back to list</a></p>
+</article>
+{% endblock %}
