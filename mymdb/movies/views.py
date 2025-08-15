@@ -33,7 +33,7 @@ def movie_list(request):
           .prefetch_related('main_actors')
           .order_by(order_by))
 
-    paginator = Paginator(qs, 24)  # 24 per page (Netflix-ish grid)
+    paginator = Paginator(qs, 25)  # 25 per page (Netflix-ish grid)
     page_number = request.GET.get("page")
     page_obj = paginator.get_page(page_number)
 

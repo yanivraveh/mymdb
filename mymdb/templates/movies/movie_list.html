@@ -3,8 +3,8 @@
 
 {% block content %}
 
-<form method="get" class="toolbar" style="margin-bottom:1rem; display:flex; gap:.5rem;">
-  <label>Sort:</label>
+<form method="get" class="toolbar">
+  <label >Sort:</label>
   <select name="sort" onchange="this.form.submit()">
     <option value="newest"     {% if sort_key == "newest" %}selected{% endif %}>Newest</option>
     <option value="title_asc"  {% if sort_key == "title_asc" %}selected{% endif %}>Title (A–Z)</option>
@@ -38,17 +38,32 @@
   {% endfor %}
 </div>
 
-<nav class="pagination" style="margin-top:1rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+<nav class="pagination">
   {% if page_obj.has_previous %}
-    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page=1">« First</a>
-    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.previous_page_number }}">‹ Prev</a>
+    <a class="pagination__link" href="?{{ base_qs }}{% if base_qs %}&{% endif %}page=1">
+        <span class="d-xs-none">« First</span>
+        <span class="d-sm-none">«</span>
+    </a>
+    <a class="pagination__link" href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.previous_page_number }}">
+        <span class="d-xs-none">‹ Prev</span>
+        <span class="d-sm-none">‹</span>
+    </a>
   {% endif %}
 
-  <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  <span class="pagination__status">
+      <span class="d-xs-none">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      <span class="d-sm-none">{{ page_obj.number }}/{{ page_obj.paginator.num_pages }}</span>
+  </span>
 
   {% if page_obj.has_next %}
-    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.next_page_number }}">Next ›</a>
-    <a href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.paginator.num_pages }}">Last »</a>
+    <a class="pagination__link" href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.next_page_number }}">
+        <span class="d-xs-none">Next ›</span>
+        <span class="d-sm-none">›</span>
+    </a>
+    <a class="pagination__link" href="?{{ base_qs }}{% if base_qs %}&{% endif %}page={{ page_obj.paginator.num_pages }}">
+        <span class="d-xs-none">Last »</span>
+        <span class="d-sm-none">»</span>
+    </a>
   {% endif %}
 </nav>
 
