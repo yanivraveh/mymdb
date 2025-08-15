@@ -14,11 +14,11 @@ def user_signup(request):
 
         if password != password2:
             messages.error(request, 'Passwords do not match.')
-            return redirect('signup')
+            return redirect('accounts:user_signup')
 
         if User.objects.filter(username=username).exists():
             messages.error(request, 'Username already taken.')
-            return redirect('signup')
+            return redirect('accounts:user_signup')
 
         user = User.objects.create_user(username=username, email=email, password=password)
         login(request, user)
@@ -33,11 +33,12 @@ def user_login(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect("users:course_list")
+            return redirect("/")
         else:
-            return render(request, "login.html", {"error": "Invalid username or password"})
-    return render(request, "login.html")
+            messages.error(request, 'Invalid username or password.')
+            return redirect('accounts:user_login')
+    return render(request, 'accounts/login.html')
 
 def user_logout(request):
     logout(request)
-    return redirect("users:login")
+    return redirect("/")
