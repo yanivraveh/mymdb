@@ -12,6 +12,8 @@ from django.db.models import Avg, Count
 from urllib.parse import urlencode
 from .forms import ReviewForm
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 
 SORTS = {
     "title_asc": "title",
@@ -24,6 +26,7 @@ SORTS = {
 
 # Create your views here.
 
+# Renders the main movie list page with pagination and sorting.
 def movie_list(request):
     sort_key = request.GET.get("sort", "newest")
     order_by = SORTS.get(sort_key, SORTS["newest"])
@@ -51,7 +54,7 @@ def movie_list(request):
     })
 
 
-
+# Renders the detailed view for a single movie, including ratings and reviews.
 def movie_details(request, pk):
     movie = get_object_or_404(
         Movie.objects.select_related('director').prefetch_related('main_actors'),
@@ -78,17 +81,7 @@ def movie_details(request, pk):
         user_review = Review.objects.filter(movie=movie, user=request.user).first()
 
     if request.method == 'POST' and request.user.is_authenticated:
-        # Check which form was submitted
-        if 'score' in request.POST:
-            score = request.POST.get('score')
-            Rating.objects.update_or_create(
-                user=request.user, movie=movie,
-                defaults={'score': score}
-            )
-            messages.success(request, 'Your rating has been submitted.')
-            return redirect('movies:movie_details', pk=movie.pk)
-
-        elif 'review_submit' in request.POST:
+        if 'review_submit' in request.POST:
             if user_review:
                 messages.error(request, 'You have already submitted a review for this movie.')
                 return redirect('movies:movie_details', pk=movie.pk)
@@ -114,12 +107,49 @@ def movie_details(request, pk):
         'distribution_data': distribution_data,
     })
 
+# Handles AJAX requests for submitting a movie rating.
+@require_POST
+def rate_movie(request, movie_id):
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'You must be logged in to rate a movie.'}, status=401)
+    movie = get_object_or_404(Movie, pk=movie_id)
+    score = request.POST.get('score')
+
+    if not score:
+        return JsonResponse({'status': 'error', 'message': 'Score is required.'}, status=400)
+
+    Rating.objects.update_or_create(
+        user=request.user,
+        movie=movie,
+        defaults={'score': score}
+    )
+    
+    # Recalculate stats
+    all_ratings = Rating.objects.filter(movie=movie)
+    average_rating = all_ratings.aggregate(Avg('score'))['score__avg'] or 0
+    total_ratings = all_ratings.count()
+    
+    rating_distribution = all_ratings.values('score').annotate(count=Count('score')).order_by('score')
+    
+    distribution_data = {i: 0 for i in range(1, 6)}
+    for item in rating_distribution:
+        distribution_data[item['score']] = (item['count'] / total_ratings) * 100 if total_ratings > 0 else 0
+
+    return JsonResponse({
+        'status': 'success',
+        'message': 'Your rating has been submitted.',
+        'new_average_rating': round(average_rating, 1),
+        'new_distribution': distribution_data
+    })
+
+# A helper function to split a full name into first and last names.
 def split_name(fullname: str) -> tuple[str, str]:
     parts = (fullname or "").strip().split()
     if not parts: return ("", "")
     if len(parts) == 1: return (parts[0], "")
     return (" ".join(parts[:-1]), parts[-1])
 
+# An admin-only API endpoint for importing movie data from a JSON file.
 @api_view(["POST"])
 @permission_classes([IsAdminUser])
 @parser_classes([JSONParser, MultiPartParser])

@@ -23,7 +23,7 @@
               {% empty %}—{% endfor %}
             </p>
             {% if average_rating %}
-              <p><strong>Average Rating:</strong> {{ average_rating|floatformat:1 }} / 5.0</p>
+              <p><strong>Average Rating:</strong> <span class="average-rating">{{ average_rating|floatformat:1 }} / 5.0</span></p>
             {% endif %}
         </div>
     </article>
@@ -67,7 +67,7 @@
         <div class="card mb-3 rating-card">
           <div class="card-body">
             <h5 class="card-title">Your Rating</h5>
-            <form method="post" class="rating-form">
+            <form method="post" class="rating-form" data-user-rating="{{ user_rating.score|default:'0' }}">
                 {% csrf_token %}
                 <div class="star-rating">
                 {% for i in "54321"|make_list %}
@@ -91,9 +91,9 @@
                     <div class="poll-row">
                         <div class="poll-label">{{ score }} star</div>
                         <div class="poll-bar-container">
-                            <div class="poll-bar" style="--poll-width: {{ percentage }}%;"></div>
+                            <div class="poll-bar" style="--poll-width: {{ percentage }}%;" data-score="{{ score }}"></div>
                         </div>
-                        <div class="poll-percentage">{{ percentage|floatformat:0 }}%</div>
+                        <div class="poll-percentage" data-score="{{ score }}">{{ percentage|floatformat:0 }}%</div>
                     </div>
                     {% endfor %}
                 </div>
@@ -123,4 +123,106 @@
       {% endfor %}
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<!-- This Ajax script is used to handle the rating form. 
+ It submits the rating to the server and updates the UI, updates the average rating 
+ and distribution, prevents the user from rating the same movie twice and 
+ shows a toast message when the rating is submitted successfully. --> 
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const ratingForm = document.querySelector('.rating-form');
+    const stars = ratingForm.querySelectorAll('.star');
+
+    stars.forEach(star => {
+        star.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            const score = this.value;
+            const currentRating = ratingForm.dataset.userRating;
+
+            if (score === currentRating) {
+                return; // Do nothing if the rating is the same
+            }
+
+            const url = `/movies/{{ movie.pk }}/rate/`;
+            const csrfToken = ratingForm.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrfToken
+                },
+                body: `score=${score}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    Toastify({
+                        text: data.message,
+                        duration: 3000,
+                        close: true,
+                        gravity: "bottom",
+                        position: "center",
+                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
+                    }).showToast();
+
+                    // Update the UI
+                    ratingForm.dataset.userRating = score; // Update the stored rating
+                    document.querySelector('.rating-text').innerText = `${score}/5`;
+                    stars.forEach(s => {
+                        if (s.value <= score) {
+                            s.classList.add('rated');
+                        } else {
+                            s.classList.remove('rated');
+                        }
+                    });
+                    
+                    // Update average rating and distribution
+                    if (data.new_average_rating !== undefined) {
+                        const avgRatingEl = document.querySelector('.average-rating');
+                        if (avgRatingEl) {
+                            avgRatingEl.innerText = `${data.new_average_rating} / 5.0`;
+                        }
+                    }
+
+                    if (data.new_distribution) {
+                        for (const [score, percentage] of Object.entries(data.new_distribution)) {
+                            const pollBar = document.querySelector(`.poll-bar[data-score='${score}']`);
+                            const pollPercentage = document.querySelector(`.poll-percentage[data-score='${score}']`);
+                            if (pollBar && pollPercentage) {
+                                pollBar.style.setProperty('--poll-width', `${percentage}%`);
+                                pollPercentage.innerText = `${Math.round(percentage)}%`;
+                            }
+                        }
+                    }
+
+                } else {
+                    Toastify({
+                        text: data.message || 'An error occurred.',
+                        duration: 3000,
+                        close: true,
+                        gravity: "bottom",
+                        position: "center",
+                        backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
+                    }).showToast();
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Toastify({
+                    text: 'An unexpected error occurred.',
+                    duration: 3000,
+                    close: true,
+                    gravity: "bottom",
+                    position: "center",
+                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
+                }).showToast();
+            });
+        });
+    });
+});
+</script>
 {% endblock %}
