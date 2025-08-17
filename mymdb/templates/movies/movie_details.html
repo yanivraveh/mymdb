@@ -122,107 +122,120 @@
         </div>
       {% endfor %}
     </div>
+
+    <div class="recommendations-section mt-5">
+        <h4>Similar Movies</h4>
+        <div id="recommendations-container" class="grid">
+            {% for movie in similar_movies %}
+                <a class="card" href="{{ movie.get_absolute_url }}">
+                    {% if movie.poster %}
+                        <img src="{{ movie.poster.url }}" alt="{{ movie.title }} poster">
+                    {% endif %}
+                    <h3>{{ movie.title }}</h3>
+                </a>
+            {% empty %}
+                <p>No recommendations available at the moment.</p>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-<!-- This Ajax script is used to handle the rating form. 
- It submits the rating to the server and updates the UI, updates the average rating 
- and distribution, prevents the user from rating the same movie twice and 
- shows a toast message when the rating is submitted successfully. --> 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // --- Rating Logic ---
     const ratingForm = document.querySelector('.rating-form');
-    const stars = ratingForm.querySelectorAll('.star');
+    if (ratingForm) {
+        const stars = ratingForm.querySelectorAll('.star');
+        stars.forEach(star => {
+            star.addEventListener('click', function (e) {
+                e.preventDefault();
+                const score = this.value;
+                const currentRating = ratingForm.dataset.userRating;
 
-    stars.forEach(star => {
-        star.addEventListener('click', function (e) {
-            e.preventDefault();
+                if (score === currentRating) {
+                    return; // Do nothing if the rating is the same
+                }
 
-            const score = this.value;
-            const currentRating = ratingForm.dataset.userRating;
+                const url = `/movies/{{ movie.pk }}/rate/`;
+                const csrfToken = ratingForm.querySelector('[name=csrfmiddlewaretoken]').value;
 
-            if (score === currentRating) {
-                return; // Do nothing if the rating is the same
-            }
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: `score=${score}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        Toastify({
+                            text: data.message,
+                            duration: 3000,
+                            close: true,
+                            gravity: "bottom",
+                            position: "center",
+                            backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
+                        }).showToast();
 
-            const url = `/movies/{{ movie.pk }}/rate/`;
-            const csrfToken = ratingForm.querySelector('[name=csrfmiddlewaretoken]').value;
-
-            fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': csrfToken
-                },
-                body: `score=${score}`
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    Toastify({
-                        text: data.message,
-                        duration: 3000,
-                        close: true,
-                        gravity: "bottom",
-                        position: "center",
-                        backgroundColor: "linear-gradient(to right, #00b09b, #96c93d)",
-                    }).showToast();
-
-                    // Update the UI
-                    ratingForm.dataset.userRating = score; // Update the stored rating
-                    document.querySelector('.rating-text').innerText = `${score}/5`;
-                    stars.forEach(s => {
-                        if (s.value <= score) {
-                            s.classList.add('rated');
-                        } else {
-                            s.classList.remove('rated');
-                        }
-                    });
-                    
-                    // Update average rating and distribution
-                    if (data.new_average_rating !== undefined) {
-                        const avgRatingEl = document.querySelector('.average-rating');
-                        if (avgRatingEl) {
-                            avgRatingEl.innerText = `${data.new_average_rating} / 5.0`;
-                        }
-                    }
-
-                    if (data.new_distribution) {
-                        for (const [score, percentage] of Object.entries(data.new_distribution)) {
-                            const pollBar = document.querySelector(`.poll-bar[data-score='${score}']`);
-                            const pollPercentage = document.querySelector(`.poll-percentage[data-score='${score}']`);
-                            if (pollBar && pollPercentage) {
-                                pollBar.style.setProperty('--poll-width', `${percentage}%`);
-                                pollPercentage.innerText = `${Math.round(percentage)}%`;
+                        // Update the UI
+                        ratingForm.dataset.userRating = score; // Update the stored rating
+                        document.querySelector('.rating-text').innerText = `${score}/5`;
+                        stars.forEach(s => {
+                            if (s.value <= score) {
+                                s.classList.add('rated');
+                            } else {
+                                s.classList.remove('rated');
+                            }
+                        });
+                        
+                        // Update average rating and distribution
+                        if (data.new_average_rating !== undefined) {
+                            const avgRatingEl = document.querySelector('.average-rating');
+                            if (avgRatingEl) {
+                                avgRatingEl.innerText = `${data.new_average_rating} / 5.0`;
                             }
                         }
-                    }
 
-                } else {
+                        if (data.new_distribution) {
+                            for (const [score, percentage] of Object.entries(data.new_distribution)) {
+                                const pollBar = document.querySelector(`.poll-bar[data-score='${score}']`);
+                                const pollPercentage = document.querySelector(`.poll-percentage[data-score='${score}']`);
+                                if (pollBar && pollPercentage) {
+                                    pollBar.style.setProperty('--poll-width', `${percentage}%`);
+                                    pollPercentage.innerText = `${Math.round(percentage)}%`;
+                                }
+                            }
+                        }
+
+                    } else {
+                        Toastify({
+                            text: data.message || 'An error occurred.',
+                            duration: 3000,
+                            close: true,
+                            gravity: "bottom",
+                            position: "center",
+                            backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
+                        }).showToast();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
                     Toastify({
-                        text: data.message || 'An error occurred.',
+                        text: 'An unexpected error occurred.',
                         duration: 3000,
                         close: true,
                         gravity: "bottom",
                         position: "center",
                         backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
                     }).showToast();
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                Toastify({
-                    text: 'An unexpected error occurred.',
-                    duration: 3000,
-                    close: true,
-                    gravity: "bottom",
-                    position: "center",
-                    backgroundColor: "linear-gradient(to right, #ff5f6d, #ffc371)",
-                }).showToast();
+                });
             });
         });
-    });
+    }
 });
 </script>
 {% endblock %}

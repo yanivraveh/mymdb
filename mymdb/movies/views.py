@@ -14,6 +14,10 @@ from .forms import ReviewForm
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
+from . import ai_service
+import asyncio
+from django.views.decorators.csrf import csrf_exempt
+from django.urls import reverse
 
 SORTS = {
     "title_asc": "title",
@@ -23,6 +27,27 @@ SORTS = {
     # default fallback
     "newest": "-id",
 }
+
+@csrf_exempt
+def chatbot_api(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        user_message = data.get("message")
+        history = data.get("history", [])
+        
+        if not user_message:
+            return JsonResponse({"error": "Message is required."}, status=400)
+            
+        response_data = ai_service.get_chatbot_response(user_message, history=history)
+        
+        # Add the full URL for each movie, since the AI can't do this
+        for movie in response_data.get("movies", []):
+            if "id" in movie:
+                movie["url"] = request.build_absolute_uri(reverse("movies:movie_details", kwargs={"pk": movie["id"]}))
+
+        return JsonResponse(response_data)
+        
+    return JsonResponse({"error": "Invalid request method."}, status=405)
 
 # Create your views here.
 
@@ -57,11 +82,15 @@ def movie_list(request):
 # Renders the detailed view for a single movie, including ratings and reviews.
 def movie_details(request, pk):
     movie = get_object_or_404(
-        Movie.objects.select_related('director').prefetch_related('main_actors'),
+        Movie.objects.select_related('director').prefetch_related('main_actors', 'genres'),
         pk=pk
     )
     reviews = Review.objects.filter(movie=movie).select_related('user')
     
+    # Get similar movies (based on shared genres)
+    current_genres = movie.genres.all()
+    similar_movies = Movie.objects.filter(genres__in=current_genres).exclude(pk=pk).distinct().order_by('?')[:5]
+
     # Rating calculations
     all_ratings = Rating.objects.filter(movie=movie)
     average_rating = all_ratings.aggregate(Avg('score'))['score__avg']
@@ -105,6 +134,7 @@ def movie_details(request, pk):
         'user_rating': user_rating,
         'user_review': user_review,
         'distribution_data': distribution_data,
+        'similar_movies': similar_movies,
     })
 
 # Handles AJAX requests for submitting a movie rating.

@@ -19,7 +19,7 @@
   * Keeps TMDB IDs **only in the JSON** (for debugging/re-runs); not stored in the DB.
 * **Import endpoint (function-based DRF view)**
 
-  * `POST /import_tmdb_movies/` (admin-only via `IsAdminUser`).
+  * `POST /api/import_tmdb_movies/` (admin-only via `IsAdminUser`).
   * Accepts either raw JSON or an uploaded JSON file.
   * Upserts movies by `(title, release_year)`.
   * Splits names and creates/links `Director`, creates/links up to **4** `Actor`s, and attaches **all** `Genre`s (M2M).
@@ -43,7 +43,7 @@
 
 1. Ran the notebook to download posters and create `tmdb_movies.json`.
 2. Moved posters to `media/posters/`.
-3. Used **Postman** (Basic Auth with a staff user) to `POST /import_tmdb_movies/` with:
+3. Used **Postman** (Basic Auth with a staff user) to `POST /api/import_tmdb_movies/` with:
 
    * **raw JSON** (paste file contents) **or**
    * **form-data** with a `file` field pointing to `tmdb_movies.json`.

@@ -18,6 +18,9 @@
       <a href="/" class="logo">
           <img src="{% static 'images/mymdb_logo.svg' %}" alt="MyMDB Logo">
       </a>
+    <nav>
+      <!-- this is the header nav bar -->
+    </nav>
     <div>
       {% if user.is_authenticated %}
         Welcome, {{ user.username }} |
@@ -38,7 +41,30 @@
         <p>&copy; {% now "Y" %} MyMDB. All rights reserved.</p>
     </div>
 </footer>
+
+<div class="chat-widget">
+    <div class="chat-bubble">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"></path></svg>
+    </div>
+    <div class="chat-window">
+        <div class="chat-header">
+            <h5>MyMDBot</h5>
+            <button class="chat-close">&ndash;</button>
+        </div>
+        <div id="chat-messages" class="chat-messages">
+            <div class="message assistant">
+                Hello! I can help you find movies. Try asking "recommend a comedy" or "find dramas from the 90s".
+            </div>
+        </div>
+        <form id="chat-form" class="chat-form">
+            <input type="text" id="chat-input" placeholder="Ask me about movies..." autocomplete="off">
+            <button type="submit">&#10148;</button>
+        </form>
+    </div>
+</div>
+
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script src="{% static 'js/chat.js' %}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

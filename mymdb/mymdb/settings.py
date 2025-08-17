@@ -12,9 +12,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import os
+import dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+dotenv.load_dotenv(BASE_DIR / ".env")
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 LOGIN_URL = '/login/'
@@ -27,6 +29,7 @@ LOGOUT_REDIRECT_URL = '/login/'
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-ms&3((l=c42kp1bn^t3b@(l9=#=o3rqd)jtk)2v$=)knhn=vwj'
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
