@@ -1,4 +1,4 @@
-# MyMDB
+# MyMDB - Backend course project
 
 ## What’s in my solution
 
@@ -76,7 +76,7 @@
 Things i am thinkging about or haven't got to them yet:
 
 * **Data Fetching**: The Jupyter notebook could be replaced with a more integrated Django management command to fetch a wider range of movie data and handle poster downloads automatically.
-* **AI Chatbot**: More tunings and tweakings are needed for the conversational instructions.
+* **AI Chatbot**: Missing streaming for the chatbot's responses and more tunings and tweakings are needed for the conversational instructions.
 * **AI Integration**: The current two-step AI intent parsing could be upgraded to use Gemini's native function calling for more reliable and extensible movie searches.
 * **UI/UX**: Minor user interface and experience enhancements can be implemented to improve navigation and usability.
 * **Project Structure**: The current project layout, with the `venv` and `requirements.txt` in the root `MyMDB` directory, is a result of the initial PyCharm setup. A future refactor could involve moving these into the `mymdb` backend directory and restructuring the root to accommodate a separate `frontend` application, creating a more conventional monorepo structure.
