@@ -115,7 +115,9 @@ Things i am thinkging about or haven't got to them yet:
         ```
 
 5.  **Database Migrations**
-    *   **Note**: The provided database `db.sqlite3` is already migrated. Running this command will show "No migrations to apply." It would only be necessary if you deleted the database file to start with an empty one.
+    *   **Note**: The provided database `db.sqlite3` **is already migrated**. 
+        * Running this command will show "No migrations to apply." 
+        * It would only be necessary if you deleted the database file to start with an empty one.
     ```bash
     python manage.py migrate
     ```
@@ -134,6 +136,7 @@ Things i am thinkging about or haven't got to them yet:
     The website will be running at `http://127.0.0.1:8000/`.
 
 8.  **How the Movie Data Was Imported**
+
     **Note**: The following steps are for documentation only. The provided database is already populated.
 
     1. The `fetch_tmdb_movies.ipynb` notebook was run to download posters and create the `tmdb_movies.json` file.
