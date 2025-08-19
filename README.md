@@ -86,57 +86,62 @@ Things i am thinkging about or haven't got to them yet:
 1.  **Clone the Repository**
     ```bash
     git clone https://github.com/yanivraveh/mymdb
-    cd mymdb/mymdb
+    cd mymdb
     ```
 
 2.  **Create and Activate a Virtual Environment**
     *   **For Windows:**
         ```bash
-        python -m venv venv
-        .\venv\Scripts\activate
+        python -m venv .venv
+        .\.venv\Scripts\activate
         ```
     *   **For macOS/Linux:**
         ```bash
-        python3 -m venv venv
-        source venv/bin/activate
+        python3 -m venv .venv
+        source .venv/bin/activate
         ```
 
 3.  **Install Dependencies**
     ```bash
-    pip install -r ../requirements.txt
+    pip install -r requirements.txt
     ```
 
 4.  **Set Up Environment Variables**
-    *   Create a file named `.env` in the `mymdb` directory (the one with `manage.py`).
+    *   Navigate to the inner `mymdb` directory (the one with `manage.py`).
+    *   Create a file named `.env` in that same directory.
     *   Add your Gemini API key to this file:
         ```
         GEMINI_API_KEY="your_api_key_here"
         ```
 
-5.  **Run Database Migrations**
+5.  **Database Migrations**
+    *   **Note**: The provided database `db.sqlite3` is already migrated. Running this command will show "No migrations to apply." It would only be necessary if you deleted the database file to start with an empty one.
     ```bash
     python manage.py migrate
     ```
 
 6.  **Create an Admin Superuser**
-    *   You'll need an admin account to access the Django admin panel and use the data import endpoint.
+    *   You'll need an admin account to access the Django admin panel.
     ```bash
     python manage.py createsuperuser
     ```
 
 7.  **Run the Development Server**
+    *   Make sure you are in the directory containing `manage.py`.
     ```bash
     python manage.py runserver
     ```
     The website will be running at `http://127.0.0.1:8000/`.
 
-8.  **Current Method for Importing Movie Data**
-    1. Run the `fetch_tmdb_movies.ipynb` notebook to download posters and create the `tmdb_movies.json` file.
-    2. Move the downloaded posters from their initial location to the `media/posters/` directory.
-    3. Use a tool like Postman to make a `POST` request to the `/api/import_tmdb_movies/` endpoint.
-        *   Use Basic Authentication with the superuser credentials you created.
-        *   The request body can be either the raw JSON content of `tmdb_movies.json` or `form-data` with a `file` field pointing to the JSON file.
-    4. Verify that the data has been imported correctly by checking the **/admin** panel.
+8.  **How the Movie Data Was Imported**
+    **Note**: The following steps are for documentation only. The provided database is already populated.
+
+    1. The `fetch_tmdb_movies.ipynb` notebook was run to download posters and create the `tmdb_movies.json` file.
+    2. The downloaded posters were moved from their initial location to the `media/posters/` directory.
+    3. A tool like Postman was used to make a `POST` request to the `/api/import_tmdb_movies/` endpoint.
+        *   Authentication was done using the admin superuser credentials.
+        *   The request body contained the `tmdb_movies.json` data.
+    4. The data was verified via the **/admin** panel.
 
 ---
 Thank you for reviewing my project.

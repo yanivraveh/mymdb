@@ -10,10 +10,10 @@ venv/
 env/
 
 # Database
-db.sqlite3
+# db.sqlite3
 
 # Uploaded media
-/mymdb/media/
+# /mymdb/media/
 
 # Environment variables
 .env
