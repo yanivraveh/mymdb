@@ -6,6 +6,7 @@ from rest_framework.decorators import api_view, permission_classes, parser_class
 from rest_framework.permissions import IsAdminUser
 from rest_framework.parsers import JSONParser, MultiPartParser
 from django.shortcuts import render, get_object_or_404, redirect
+from django.core.files.storage import default_storage
 from .models import Movie, Genre, Director, Actor, Review, Rating
 from django.core.paginator import Paginator
 from django.db.models import Avg, Count
@@ -244,11 +245,10 @@ def import_tmdb_movies(request):
             # Poster (relative path like "posters/xyz.jpg")
             poster_rel = item.get("poster")
             if poster_rel:
-                poster_path = media_root / poster_rel
-                if poster_path.is_file() and movie.poster.name != poster_rel:
+                if default_storage.exists(poster_rel) and movie.poster.name != poster_rel:
                     movie.poster.name = poster_rel
                     movie.save(update_fields=["poster"])
-                elif not poster_path.is_file():
+                elif not default_storage.exists(poster_rel):
                     missing_poster_files += 1
 
             # Genres

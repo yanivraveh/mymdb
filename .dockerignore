@@ -1,0 +1,26 @@
+# .dockerignore
+.git
+.gitignore
+.venv/
+.idea/
+.vscode/
+
+# Python cache
+**/__pycache__/
+**/*.py[cod]
+
+# Local database and media (we use RDS/S3 in prod)
+mymdb/db.sqlite3
+mymdb/media/
+
+# Env files (don’t bake secrets into image)
+.env*
+# If you prefer only the two files:
+# .env.dev
+# .env.prod
+
+# Misc
+.DS_Store
+.mypy_cache/
+.pytest_cache/
+fetch_tmdb_movies.ipynb

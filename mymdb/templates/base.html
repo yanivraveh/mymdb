@@ -53,7 +53,8 @@
         </div>
         <div id="chat-messages" class="chat-messages">
             <div class="message assistant">
-                Hello! I can help you find movies. Try asking "recommend a comedy" or "find dramas from the 90s".
+              {% if AI_PROVIDER == "bedrock" %}Hello! I am Bedrock. {% else %}Hello! I am Gemini. {% endif %}
+              I can help you find movies. Try asking "recommend a comedy" or "find dramas from the 90s".
             </div>
         </div>
         <form id="chat-form" class="chat-form">

@@ -17,6 +17,8 @@ env/
 
 # Environment variables
 .env
+.env.prod
+.env.dev
 
 # IDE settings
 .idea/
