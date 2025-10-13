@@ -43,17 +43,17 @@
   * Accepts either raw JSON or an uploaded JSON file.
   * Upserts movies by `(title, release_year)`.
   * Splits names and creates/links `Director`, creates/links up to **4** `Actor`s, and attaches **all** `Genre`s (M2M).
-  * Assigns posters by **relative path** if the file exists under `MEDIA_ROOT/posters/`.
-* **Result of my import run**
+  * Assigns posters by **relative path** if the file exists in the Django default storage (local `MEDIA_ROOT/posters/` in dev, S3 in prod).
+* **Result of my import run - tmdb_movies.json**
 
   * Created **119** movies, **19** genres, **112** directors, **422** actors.
 
-* **AI Chatbot (Gemini)**
+* **AI Chatbot (Gemini/Bedrock)**
 
   * **Backend**:
     * A view `chatbot_api` that receives user messages and chat history.
-    * It calls `ai_service.get_chatbot_response` which communicates with the Gemini API.
-    * The AI service uses function calling to suggest movies from the database based on user queries (e.g., "recommend a comedy").
+    * Provider is selected by env var `AI_PROVIDER` (dev: `gemini`, prod on EC2: `bedrock`).
+    * Two-step flow: (1) parse intent/criteria, (2) query DB and generate a short reply with up to 3 recommendations.
   * **Frontend**:
     * A chat widget in `base.html`.
     * `static/js/chat.js` handles the communication with the `chatbot_api` endpoint.
@@ -81,7 +81,7 @@ Things i am thinkging about or haven't got to them yet:
 * **UI/UX**: Minor user interface and experience enhancements can be implemented to improve navigation and usability.
 * **Project Structure**: The current project layout, with the `venv` and `requirements.txt` in the root `MyMDB` directory, is a result of the initial PyCharm setup. A future refactor could involve moving these into the `mymdb` backend directory and restructuring the root to accommodate a separate `frontend` application, creating a more conventional monorepo structure.
 
-## Setup Instructions
+## Local / Dev Setup Instructions
 
 1.  **Clone the Repository**
     ```bash
@@ -146,6 +146,100 @@ Things i am thinkging about or haven't got to them yet:
         *   The request body contained the `tmdb_movies.json` data.
     4. The data was verified via the **/admin** panel.
 
+## AWS Integration (ECR, EC2, RDS, S3, Bedrock)
+
+This section documents how the same codebase runs locally and on AWS, in the order we recommend building it.
+
+### 1) Prep (env + project)
+- Two env files (not committed): `.env.dev` (local), `.env.prod` (EC2). Load via `DEPLOY_ENV` and `dotenv.load_dotenv(BASE_DIR / f".env.{DEPLOY_ENV}")`.
+- Keep `DEBUG=True` per course; `ALLOWED_HOSTS=["*"]` is acceptable.
+- Dockerfile (Daphne) and `.dockerignore` at repo root; static served by Django with `staticfiles_urlpatterns()`.
+
+### 2) IAM (instance role + Bedrock access)
+- EC2 role: allow S3 read/write on your media bucket, ECR pull, and `bedrock:InvokeModel` (and `InvokeModelWithResponseStream` if needed).
+- Bedrock console: enable access to your chosen model (e.g., Haiku or Sonnet).
+
+### 3) ECR (build/push image)
+- Build/push (replace account/region):
+  ```bash
+  docker build --pull --no-cache -t mymdb:prod .
+  docker tag mymdb:prod <ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com/mymdb-repo:prod
+  aws ecr get-login-password --region <REGION> | docker login --username AWS --password-stdin <ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com
+  docker push <ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com/mymdb-repo:prod
+  ```
+
+### 4) RDS (PostgreSQL)
+- In prod: `ENGINE=django.db.backends.postgresql` (dev stays SQLite).
+- Security Groups: RDS inbound `5432` from the EC2 instance SG.
+- Console steps (quick):
+  - Create database → Engine: PostgreSQL → Templates: Free tier.
+  - DB instance identifier: choose a name; Master username/password.
+  - Storage: gp3 (default is fine for demo).
+  - Connectivity: Public access = Yes; Do not connect to an EC2 compute resource.
+  - Create DB and note the Endpoint (hostname) for `.env.prod`.
+
+### 5) S3 (media only)
+- `django-storages` default storage to S3 (location `media`, `default_acl: public-read` or a public bucket policy). 
+- `MEDIA_URL` points to your bucket domain (avoid `/media/media/`).
+- Console steps (quick):
+  - Create bucket → General purpose → Bucket name.
+  - ACLs: Enabled; Block public access: uncheck all (for demo).
+  - Upload posters from repo path: `mymdb/mymdb/media/posters/` (keys will be under `media/posters/...`).
+
+### 6) EC2 (single instance run)
+- Launch an Ubuntu instance with the IAM role; open inbound TCP `8000` for testing.
+- Connect to the instance using EC2 Instance Connect or SSH
+- Set and Copy the local `.env.prod` to the instance's location`/home/ubuntu/mymdb/.env.prod`.
+- Install Docker and AWS CLI
+  `https://docs.docker.com/engine/install/ubuntu/`
+  `https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html`
+
+- Allow docker command without sudo:
+  ```bash
+  sudo usermod -aG docker $USER
+  newgrp docker
+  ```
+
+- Login to ECR and pull the image:
+  ```bash
+  aws ecr get-login-password --region <REGION> \
+  | docker login --username AWS --password-stdin <ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com
+  docker pull <ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com/mymdb-repo:prod
+  ```
+- Run container:
+  ```bash
+  docker run -d --name mymdb-instance-01 \
+    -p 8000:8000 --restart unless-stopped \
+    --env-file /home/ubuntu/mymdb/.env.prod \
+    -w /app/mymdb \
+    <ACCOUNT>.dkr.ecr.<REGION>.amazonaws.com/mymdb-repo:prod
+  ```
+- Enter the container and Run migrations and create admin inside the container:
+  ```bash
+  docker exec -it mymdb-instance-01 bash
+  python manage.py migrate
+  python manage.py createsuperuser
+  
+  ```
+
+### 7) Import data on EC2
+- `POST /api/import_tmdb_movies/` (admin auth). Accepts raw JSON or `file` upload.
+- Poster keys like `posters/xyz.jpg` resolve against S3 in prod.
+
+### 8) Bedrock test and tuning
+- Env: `AI_PROVIDER=bedrock`, `AWS_REGION`, `BEDROCK_MODEL_ID` (no quotes).
+- If throttled or non-JSON text: use Haiku, lower `max_tokens`, set `temperature=0`, and rely on JSON fallback in code.
+
+- Note: Bedrock returns plain text (not valid JSON) for the conversational step, so our JSON parse failed and the fallback kicked in. To reduce this:
+  - Tighten the conversational system instruction to “return ONLY a JSON object { "text": "..." }”.
+  - Set temperature=0 in the Bedrock call to make it stick to “JSON only”.
+  - Improve fallback: if JSON parse fails, use the model’s text as the message and still attach your DB links, not the generic line.
+
+
+### 9) Target Group & Load Balancer 
+- Create Target Group (Instances, name it, HTTP 80, health path `/`, register the two instances to port 8000).
+- Create ALB (listener 80) → forward to TG; restrict EC2 SG to ALB SG.
+
+
 ---
 Thank you for reviewing my project.
-
