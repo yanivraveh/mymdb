@@ -59,29 +59,9 @@
     * `static/js/chat.js` handles the communication with the `chatbot_api` endpoint.
     * Displays AI responses and movie recommendations with links to the movie details page.
 
-## Key choices (to stay within course scope)
-
-* **Function-Based Views** (not CBVs), per instruction.
-* **Essential fields only** (no full TMDB clone).
-* **No serializers** for this admin-only import to keep it simple (validation handled inline).
-* **No external IDs** in the DB (kept in JSON only).
-* **Four main actors** enforced during import (exercise requirement).
-* Posters handled as files in `media/posters/` (not uploaded via API).
-* **Jupyter notebook for data collection**: I could have created a Django management command to fetch data from TMDB and import directly to the database, but since we haven't covered management commands in class yet, I went with the Jupyter notebook approach to collect the data first, then import via API.
-* **Separate `accounts` app**: While the current authentication features could live inside the main project, creating a dedicated `accounts` app is a forward-thinking choice. I may want to add a user profile model with additional fields.
-* **Project Naming**: I recognize that having the repository, the Django project, and the main settings application all named `mymdb` is a bit confusing. This was an unintentional result of the initial setup. I plan to fix it and in future projects, I'll use more distinct naming (e.g., `core` or `config` for the settings app, backend or server for the back) to improve clarity.
 
 
-## Notes and Future Improvements
-Things i am thinkging about or haven't got to them yet:
-
-* **Data Fetching**: The Jupyter notebook could be replaced with a more integrated Django management command to fetch a wider range of movie data and handle poster downloads automatically.
-* **AI Chatbot**: Missing streaming for the chatbot's responses and more tunings and tweakings are needed for the conversational instructions.
-* **AI Integration**: The current two-step AI intent parsing could be upgraded to use Gemini's native function calling for more reliable and extensible movie searches.
-* **UI/UX**: Minor user interface and experience enhancements can be implemented to improve navigation and usability.
-* **Project Structure**: The current project layout, with the `venv` and `requirements.txt` in the root `MyMDB` directory, is a result of the initial PyCharm setup. A future refactor could involve moving these into the `mymdb` backend directory and restructuring the root to accommodate a separate `frontend` application, creating a more conventional monorepo structure.
-
-## Local / Dev Setup Instructions
+## Phase 1 – Local / Dev Setup Instructions
 
 1.  **Clone the Repository**
     ```bash
@@ -146,7 +126,7 @@ Things i am thinkging about or haven't got to them yet:
         *   The request body contained the `tmdb_movies.json` data.
     4. The data was verified via the **/admin** panel.
 
-## AWS Integration (ECR, EC2, RDS, S3, Bedrock)
+## Phase 2 – AWS Integration (ECR, EC2, RDS, S3, Bedrock)
 
 This section documents how the same codebase runs locally and on AWS, in the order we recommend building it.
 
@@ -240,6 +220,105 @@ This section documents how the same codebase runs locally and on AWS, in the ord
 - Create Target Group (Instances, name it, HTTP 80, health path `/`, register the two instances to port 8000).
 - Create ALB (listener 80) → forward to TG; restrict EC2 SG to ALB SG.
 
+## Phase 3 – Realtime Multi‑User Chat (Channels + Kafka + React)
 
+### Architecture
+- WebSockets: Django Channels (Daphne) with `AuthMiddlewareStack` (login required).
+- Kafka in the loop:
+  - Producer: WS consumer publishes chat events to topic (`chat-messages`, key = room slug).
+  - Broadcaster: a background Kafka consumer embedded in the ASGI process rebroadcasts to the local Channels group (works without Redis).
+  - Persister: a single management command consumer (`persist_kafka`) writes `Room` and `Message` rows to DB using an idempotent `event_id`.
+- React frontend: Vite dev server with proxy ( `/api` and `/ws` → `http://localhost:8000`), rendered inside a small iframe panel launched from `base.html`.
+
+### Data model (new)
+- `chat.Room(name, slug, created_by, created_at)` – `slug` is unique.
+- `chat.Message(event_id UUID unique, room→FK, user→FK nullable, content, created_at)` – `event_id` guarantees exactly‑once inserts.
+
+### Endpoints
+- REST for React:
+  - `GET /api/chat/rooms/` – list rooms.
+  - `POST /api/chat/rooms/?name=...` – create if missing (auth required).
+  - `GET /api/chat/rooms/<slug>/messages?limit=50` – recent history.
+- WebSocket: `ws://<host>/ws/chat/<slug>/` (regex allows hyphens: `[-\w]+`).
+
+### Broadcaster: embedded vs external
+
+- We use the embedded broadcaster: `chat/kafka_background.py` starts a Kafka consumer inside the ASGI process (via `chat/apps.py`). It rebroadcasts to Channels groups locally, which works with the in‑memory channel layer (no Redis).
+- Do NOT run `python manage.py broadcast_kafka` in normal use. It lives in a separate process and cannot deliver to WebSocket groups with the in‑memory layer. Keep it only for debugging, or if you implement the HTTP relay pattern (external consumer POSTs to a Django endpoint that calls `group_send`).
+- Normal dev run: Kafka → Daphne (ASGI) → embedded broadcaster → clients; plus a single `persist_kafka` process to write to DB.
+
+### Local run (dev)
+Prereqs: Docker Desktop, Node 18+, Python venv
+
+1) Start Kafka (+ UI)
+```bash
+docker compose -f kafka-infra/docker-compose.yml up -d
+```
+
+2) Start Django (ASGI)
+```bash
+daphne -b 0.0.0.0 -p 8000 mymdb.asgi:application
+```
+
+(Do not run `broadcast_kafka`; broadcaster is embedded in ASGI.)
+
+3) Start DB writer (single process)
+```bash
+python manage.py persist_kafka
+```
+
+4) Start React dev
+```bash
+cd chat-frontend && npm run dev
+```
+Open MyMDB and click the blue 💬 bubble to open the chat panel (an iframe to the React app).
+
+### Environment variables
+- `BOOTSTRAP_SERVERS=localhost:29092`
+- `TOPIC_NAME=chat-messages`
+- Embedded broadcaster: optional `GROUP_ID` (leave empty in dev; in K8s set a unique value per pod).
+- Persister: `PERSIST_GROUP_ID=chat-db-writer` (single global writer).
+
+### Windows dev note (static MIME types)
+If the browser refuses to load `.js`/`.css` as “text/plain”, add in `settings.py`:
+```python
+import mimetypes
+mimetypes.add_type("application/javascript", ".js", True)
+mimetypes.add_type("text/javascript", ".js", True)
+mimetypes.add_type("text/css", ".css", True)
+```
+
+### CSRF/Proxy (React → Django)
+- Vite proxy in `vite.config.js` routes `/api` and `/ws` to `http://localhost:8000`.
+- `CSRF_TRUSTED_ORIGINS` includes `http://localhost:5173`.
+- Frontend sends `X-CSRFToken` on POST to `/api/chat/rooms/` (uses cookie `csrftoken`).
+
+### Scaling to K8s (preview)
+- Backend: 3 replicas; each pod runs the embedded broadcaster with a unique `GROUP_ID` so every pod receives every message and fans out to its own sockets (no Redis needed per course scope).
+- Persister: 1 replica deployment with `PERSIST_GROUP_ID=chat-db-writer`.
+- React: single deployment/service; expose via Ingress/LoadBalancer. Kafka can run in‑cluster or externally.
+
+# Appendix
+## Key choices (to stay within course scope)
+
+* **Function-Based Views** (not CBVs), per instruction.
+* **Essential fields only** (no full TMDB clone).
+* **No serializers** for this admin-only import to keep it simple (validation handled inline).
+* **No external IDs** in the DB (kept in JSON only).
+* **Four main actors** enforced during import (exercise requirement).
+* Posters handled as files in `media/posters/` (not uploaded via API).
+* **Jupyter notebook for data collection**: I could have created a Django management command to fetch data from TMDB and import directly to the database, but since we haven't covered management commands in class yet, I went with the Jupyter notebook approach to collect the data first, then import via API.
+* **Separate `accounts` app**: While the current authentication features could live inside the main project, creating a dedicated `accounts` app is a forward-thinking choice. I may want to add a user profile model with additional fields.
+* **Project Naming**: I recognize that having the repository, the Django project, and the main settings application all named `mymdb` is a bit confusing. This was an unintentional result of the initial setup. I plan to fix it and in future projects, I'll use more distinct naming (e.g., `core` or `config` for the settings app, backend or server for the back) to improve clarity.
+
+
+## Notes and Future Improvements
+Things i am thinkging about or haven't got to them yet:
+
+* **Data Fetching**: The Jupyter notebook could be replaced with a more integrated Django management command to fetch a wider range of movie data and handle poster downloads automatically.
+* **AI Chatbot**: Missing streaming for the chatbot's responses and more tunings and tweakings are needed for the conversational instructions.
+* **AI Integration**: The current two-step AI intent parsing could be upgraded to use Gemini's native function calling for more reliable and extensible movie searches.
+* **UI/UX**: Minor user interface and experience enhancements can be implemented to improve navigation and usability.
+* **Project Structure**: The current project layout, with the `venv` and `requirements.txt` in the root `MyMDB` directory, is a result of the initial PyCharm setup. A future refactor could involve moving these into the `mymdb` backend directory and restructuring the root to accommodate a separate `frontend` application, creating a more conventional monorepo structure.
 ---
 Thank you for reviewing my project.
