@@ -1,0 +1,134 @@
+:root { 
+  --card-bg:#fff; 
+  --card-shadow:0 10px 30px rgba(0,0,0,.15); 
+  --muted:#666; 
+  --primary:#a78057; 
+  --radius:12px; 
+}
+
+#root { 
+  padding: 0; 
+  width: 95%;
+}
+
+.wrap { 
+  width: 100% ; 
+  max-width: 100% ; 
+  margin: 0; 
+  font-family:system-ui, Arial, sans-serif; 
+}
+
+.card { 
+  background:var(--card-bg); 
+  border-radius:var(--radius); 
+  /* box-shadow:var(--card-shadow);  */
+  box-shadow:none;
+  width: 100%;
+  height: 100%;
+  padding: 16px 16px;
+  background: transparent;
+  border-radius: 0;
+}
+
+.h1 { 
+  font-size:1.4rem; 
+  margin:0 0 .75rem; 
+}
+
+.row { 
+  display:flex; 
+  gap:.5rem; 
+}
+
+.input { 
+  flex:1; 
+  padding:.6rem .8rem; 
+  border:1px solid #ddd; 
+  border-radius:8px; 
+}
+
+.btn { 
+  padding:.55rem .9rem; 
+  border-radius:8px; 
+  border:1px solid #ddd; 
+  background:#f8f8f8; 
+  cursor:pointer; 
+}
+
+.btn.primary { 
+  background:var(--primary); 
+  color:#fff; 
+  border-color:transparent; 
+}
+
+.list { 
+  list-style:none; 
+  padding:0; 
+  margin:.5rem 0 0; 
+}
+
+.list li { 
+  display:flex; 
+  justify-content:space-between; 
+  align-items:center; 
+  padding:.45rem .6rem; 
+  border:1px solid #eee; 
+  border-radius:8px; 
+  margin:.5rem 0; 
+}
+
+.room-head { 
+  display:flex; 
+  align-items:center; 
+  gap:.5rem; 
+  margin-bottom:.5rem; 
+}
+
+.log { 
+  border:1px solid #eee; 
+  border-radius:10px; 
+  background:#fafafa; 
+  padding:.75rem; 
+  height:48vh; 
+  overflow:auto; 
+}
+
+.msg { 
+  margin:.35rem 0; 
+}
+
+.meta { 
+  font-size:.8rem; 
+  color:var(--muted); 
+  margin-left:.4rem; 
+}
+
+.sticky { 
+  display:flex; 
+  gap:.5rem; 
+  margin-top:.6rem; 
+}
+
+/* iframe document reset */
+html, body, #root { 
+  height: 100%; 
+}
+body { 
+  margin: 0; 
+  display: flex; 
+  justify-content: center; 
+  align-items: center;
+  background: transparent; 
+}
+
+/* @media (max-width:480px){ 
+  .wrap { margin:.75rem } 
+} */
+
+/* #root { width: 90% !important; height: 90% !important; } */
+
+/* Make width include padding so child doesn't overflow parent */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Vertically center the root’s single child (.wrap) */
+/* #root { display: flex; align-items: center; } */
