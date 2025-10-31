@@ -42,6 +42,8 @@
     </div>
 </footer>
 
+<!-- AI Chatbot Widget -->
+
 <div class="chat-widget">
     <div class="chat-bubble">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"></path></svg>
@@ -62,7 +64,48 @@
             <button type="submit">&#10148;</button>
         </form>
     </div>
+</div> 
+
+<!-- RealTime Multi-User Chat Widget -->
+
+<div id="rtchat-root"
+     data-auth="{{ request.user.is_authenticated|yesno:'true,false' }}"
+     data-login-url="{% url 'accounts:user_login' %}?next={{ request.get_full_path|urlencode }}">
+  <button id="rtchat-launcher" class="rtchat-bubble" aria-label="Open chat">💬</button>
+  <div id="rtchat-panel" style="
+    position: fixed; right: 86px; bottom: 86px; z-index: 9999;
+    width: 380px; height: 520px; display:none; box-shadow:0 10px 30px rgba(0,0,0,.2);
+    background:#fff; border-radius:12px; overflow:hidden;">
+    <iframe id="rtchat-iframe" data-src="http://localhost:5173/" title="Chat"
+        style="width:100%; height:100%; border:0;"></iframe>
+  </div>
 </div>
+
+<script>
+  (function(){
+    const root  = document.getElementById('rtchat-root');
+    const btn   = document.getElementById('rtchat-launcher');
+    const panel = document.getElementById('rtchat-panel');
+    const iframe = document.getElementById('rtchat-iframe');  
+
+
+    const isAuth  = root.dataset.auth === 'true';
+    const loginUrl = root.dataset.loginUrl;
+
+    btn.addEventListener('click', () => {
+      if (!isAuth) { 
+        // Option A: redirect to login 
+        window.location.href = loginUrl; 
+        // Option B: show alert
+        // alert('Must be logged in to use the multi‑user chat');        
+        return; }
+
+      if (!iframe.src) iframe.src = iframe.dataset.src; // lazy load
+
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+  })();
+</script>
 
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
 <script src="{% static 'js/chat.js' %}"></script>

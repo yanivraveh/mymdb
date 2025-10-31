@@ -414,7 +414,7 @@ footer a {
 }
 
 .message.user {
-    background-color: #8e7f63;
+    background-color: #817255;
     color: white;
     align-self: flex-end;
     border-bottom-right-radius: 4px;
@@ -446,11 +446,11 @@ footer a {
 }
 
 #chat-input:focus {
-    border-color: #8e7f63;
+    border-color: #817255;
 }
 
 .chat-form button {
-    background-color: #8e7f63;
+    background-color: #817255;
     color: white;
     border: none;
     border-radius: 50%;
@@ -501,7 +501,7 @@ footer a {
 .chat-bubble {
     width: 60px;
     height: 60px;
-    background-color: #8e7f63;
+    background-color: #817255;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -517,6 +517,27 @@ footer a {
 
 .chat-bubble svg {
     fill: white;
+}
+
+.rtchat-bubble {
+    position: fixed;
+    right: 86px;
+    bottom: 20px;
+    z-index: 9999;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: none;
+    background: #a78057;
+    color: #fff;
+    font-size: 22px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: transform 0.2s;
+  }
+
+.rtchat-bubble:hover {
+    transform: scale(1.1);
 }
 
 .chat-window {
