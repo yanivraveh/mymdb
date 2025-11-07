@@ -196,3 +196,9 @@ if DEPLOY_ENV == "prod":
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")  # "gemini" locally, "bedrock" on EC2
 AWS_REGION = os.getenv("AWS_REGION")
 BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "anthropic.claude-3-haiku-20240307-v1:0")
+
+# RAG settings (dev/local)
+RAG_ENABLED = os.getenv("RAG_ENABLED", "true").lower() == "true"
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
+RAG_MAX_DOCS = int(os.getenv("RAG_MAX_DOCS", "500"))
+RAG_EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "all-MiniLM-L6-v2")

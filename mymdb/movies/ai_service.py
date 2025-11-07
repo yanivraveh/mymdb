@@ -1,4 +1,5 @@
 import json, boto3
+import os
 import logging
 from functools import reduce
 from operator import or_
@@ -7,6 +8,7 @@ from django.db.models import Q
 
 from mymdb import settings
 from .models import Movie
+from . import rag_index
 
 logger = logging.getLogger(__name__)
 
@@ -80,14 +82,15 @@ User: "movies from the 70s"
 """
 
 CONVERSATIONALIST_SYSTEM_INSTRUCTION = """
-You are "MyDBot", a witty and knowledgeable movie expert.
-Your job is to generate a friendly, conversational response based on the user's request and the context provided.
-- Your response must be a single JSON object with one key: "text".
+You are MyMDBot, a movie recommendation assistant.
+Return only a single JSON object: {"text": "..."}.
 
-- If a list of "movies_found" is provided, present up to 3 of them to the user in a fun, brief, and conversational way.
-- If NO "movies_found" list is provided, simply have a natural, witty conversation with the user based on their message.
-- If the user's intent was "summarize_history", present the provided movie list as a summary of what has been discussed.
-- If you receive a "special_instruction", prioritize following it. For example, if asked to deflect, do so with a witty, movie-related comment.
+Rules:
+- If movies_found is provided and relevant to the user’s request, briefly recommend up to 3 (1 short line each, no spoilers). Do not invent titles; use only movies_found.
+- If movies_found is empty OR the user’s request is off-topic (not about movies), do NOT recommend. Politely say you can help with movie recommendations and ask a clarifying question (e.g., genre, decade, actor, or director).
+- If the user asks for “more” without new criteria, suggest clarifying what to change (e.g., “more comedies from the 90s?”). Do not repeat the same titles.
+- If the user asks to summarize what was shown, keep it brief (“We discussed X, Y, Z.”). If none, say so.
+- Keep replies under ~60 words. Friendly, concise, no spoilers, no extra JSON fields.
 """
 
 def _try_parse_json(txt: str):
@@ -241,144 +244,69 @@ def _bedrock_response(user_message: str, history: list = None):
         data["movies"] = movies_to_present
     return data
 
+def _keyword_db_fallback(user_message: str, top_k: int = 5):
+    """Simple keyword-only DB search as a safety net (no LLM)."""
+    search_keywords = [w for w in user_message.split() if w.lower() not in STOP_WORDS]
+    if not search_keywords:
+        return []
+    keyword_query = reduce(or_, [Q(title__icontains=kw) | Q(description__icontains=kw) for kw in search_keywords])
+    qs = Movie.objects.filter(keyword_query).distinct().values("id", "title", "release_year", "description")[: top_k]
+    return list(qs)
+
+
 def _gemini_response(user_message: str, history: list = None):
     if not settings.GEMINI_API_KEY:
         return {"text": "Sorry, the chatbot is currently unavailable.", "movies": []}
 
     try:
-        # Step 1: AI Parser - Determine the user's intent.
+        # Configure Gemini (one-call conversationalist)
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        parser_model = genai.GenerativeModel(model_name='gemini-2.0-flash-lite-001',
-                                            system_instruction=PARSER_SYSTEM_INSTRUCTION)
 
-        parser_prompt = f"""
-            Conversation History: {json.dumps(history)}
-            Latest User Request: "{user_message}"
-        """
-        parser_response = parser_model.generate_content(parser_prompt)
+        # RAG retrieval via FAISS (no Gemini embeddings)
+        top_k = int(os.getenv("RAG_TOP_K", "5"))
+        max_docs = int(os.getenv("RAG_MAX_DOCS", "500"))
+        embed_model = os.getenv("RAG_EMBED_MODEL", "all-MiniLM-L6-v2")
 
-        # Sanitize the response to ensure it's valid JSON
-        criteria_text = parser_response.text.strip().replace("```json", "```").replace("```", "")
-        parsed_response = json.loads(criteria_text)
-        intent = parsed_response.get("intent")
-        criteria = parsed_response.get("criteria", {})
-
-        found_movies = []
+        candidate_ids = rag_index.retrieve(user_message, top_k=top_k, model_name=embed_model, max_docs=max_docs)
         movies_to_present = []
+        if candidate_ids:
+            id_to_rank = {mid: i for i, mid in enumerate(candidate_ids)}
+            rows = list(
+                Movie.objects.filter(id__in=candidate_ids).values("id", "title", "release_year", "description")
+            )
+            rows.sort(key=lambda m: id_to_rank.get(m["id"], 10_000))
+            movies_to_present = rows[: min(3, len(rows))]
+
+        if not movies_to_present:
+            fallback_rows = _keyword_db_fallback(user_message, top_k=top_k)
+            if fallback_rows:
+                movies_to_present = fallback_rows[: min(3, len(fallback_rows))]
+
         conversational_context = {}
-
-        if intent == "search_movies":
-            query_parts = []
-
-            # Apply filters from the parsed criteria
-            if criteria.get("genres"):
-                for genre in criteria["genres"]:
-                    query_parts.append(Q(genres__name__icontains=genre))
-
-            if criteria.get("release_year"):
-                year_value = criteria["release_year"]
-                if isinstance(year_value, dict) and "start" in year_value and "end" in year_value:
-                    query_parts.append(Q(release_year__gte=year_value["start"], release_year__lte=year_value["end"]))
-                elif isinstance(year_value, int):
-                    query_parts.append(Q(release_year=year_value))
-
-
-            if criteria.get("actors"):
-                actor_query = Q()
-                for actor_name in criteria["actors"]:
-                    # This is a simple split; won't handle middle names well but is good for a start.
-                    parts = actor_name.split()
-                    if len(parts) > 1:
-                        actor_query |= (Q(main_actors__first_name__icontains=parts[0]) & Q(main_actors__last_name__icontains=parts[-1]))
-                    else:
-                        actor_query |= (Q(main_actors__first_name__icontains=actor_name) | Q(main_actors__last_name__icontains=actor_name))
-                if actor_query:
-                    query_parts.append(actor_query)
-
-            if criteria.get("director"):
-                director_query = Q()
-                # Assuming director is a single name for now
-                director_name = criteria["director"]
-                parts = director_name.split()
-                if len(parts) > 1:
-                    director_query |= (Q(director__first_name__icontains=parts[0]) & Q(director__last_name__icontains=parts[-1]))
-                else:
-                    director_query |= (Q(director__first_name__icontains=director_name) | Q(director__last_name__icontains=director_name))
-                if director_query:
-                    query_parts.append(director_query)
-
-            if criteria.get("keywords"):
-                search_keywords = [word for word in " ".join(criteria["keywords"]).split() if
-                                   word.lower() not in STOP_WORDS]
-                if search_keywords:
-                    keyword_query = reduce(or_,
-                                           [Q(title__icontains=kw) | Q(description__icontains=kw) for kw in
-                                            search_keywords])
-                    query_parts.append(keyword_query)
-
-            if not query_parts:
-                return {"text": "I'm sorry, I couldn't understand what to search for. Could you be more specific?",
-                        "movies": []}
-
-            final_query = reduce(or_, query_parts)
-            query_set = Movie.objects.filter(final_query)
-
-            if criteria.get("exclude_ids"):
-                query_set = query_set.exclude(id__in=criteria["exclude_ids"])
-
-            found_movies = list(query_set.distinct().values("id", "title", "release_year", "description")[:10])
-            movies_to_present = found_movies[:3]
+        if movies_to_present:
             conversational_context["movies_found"] = movies_to_present
-            if not found_movies:
-                conversational_context["special_instruction"] = "The user searched for movies, but none were found in the database. Inform them of this politely."
+        else:
+            conversational_context["special_instruction"] = (
+                "The user searched for movies, but none were found in the database. Inform them of this politely."
+            )
 
-        elif intent == "summarize_history":
-            previously_shown_movies = []
-            if history:
-                for turn in history:
-                    if turn.get('role') == 'model':
-                        try:
-                            model_message_str = turn['parts'][0]['text']
-                            model_message_obj = json.loads(model_message_str)
-                            if 'movies' in model_message_obj and model_message_obj['movies']:
-                                previously_shown_movies.extend(model_message_obj['movies'])
-                        except (json.JSONDecodeError, KeyError, IndexError):
-                            continue  # Ignore malformed history items
-
-            seen_ids = set()
-            unique_movies = []
-            for movie in previously_shown_movies:
-                if movie['id'] not in seen_ids:
-                    unique_movies.append(movie)
-                    seen_ids.add(movie['id'])
-
-            movies_to_present = unique_movies
-            conversational_context["movies_found"] = movies_to_present
-            if not movies_to_present:
-                conversational_context[
-                    "special_instruction"] = "The user asked for a summary, but no movies have been recommended yet. Inform them of this politely."
-
-        elif intent == "off_topic":
-            conversational_context[
-                "special_instruction"] = "The user's question is off-topic. Gently deflect it with a witty, movie-related comment without answering it."
-
-        # Step 2: AI Conversationalist - Generate a friendly response.
-        conversational_model = genai.GenerativeModel(model_name='gemini-2.0-flash-lite-001',
-                                                    system_instruction=CONVERSATIONALIST_SYSTEM_INSTRUCTION)
-
+        model = genai.GenerativeModel(
+            model_name='gemini-2.0-flash-lite-001',
+            system_instruction=CONVERSATIONALIST_SYSTEM_INSTRUCTION,
+        )
         final_prompt = f"""
             User's original request: "{user_message}"
             Conversation History: {json.dumps(history)}
-            User's Intent: "{intent}"
             Context: {json.dumps(conversational_context)}
         """
-        final_response = conversational_model.generate_content(final_prompt)
-        response_json_text = final_response.text.strip().replace("```json", "```").replace("```", "")
-        response_data = json.loads(response_json_text)
-
-        response_data["movies"] = movies_to_present
-
-        return response_data
+        final_response = model.generate_content(final_prompt)
+        response_text = final_response.text.strip().replace("```json", "```").replace("```", "")
+        data = _try_parse_json(response_text)
+        if not data:
+            fallback = "Here are some movies you might like:" if movies_to_present else "Sorry, I had trouble formatting the response."
+            data = {"text": fallback}
+        data["movies"] = movies_to_present
+        return data
 
     except Exception as e:
         error_message = f"Error in chatbot response generation: {e}"
