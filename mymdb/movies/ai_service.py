@@ -9,6 +9,9 @@ from django.db.models import Q
 from mymdb import settings
 from .models import Movie
 from . import rag_index
+import re
+from collections import Counter
+
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +23,61 @@ STOP_WORDS = {
     'give', 'me', 'show', 'movies', 'movie', 'some', 'find', 'recommend',
     'please', 'want'
 }
+
+def extract_topic_hint(message: str) -> str:
+    m = message.strip()
+    # Try phrases after cue words
+    mlow = m.lower()
+    for cue in ["about", "with", "featuring", "related to", "on", "around"]:
+        if cue in mlow:
+            after = m[mlow.find(cue) + len(cue):].strip(" ?.!:,;-")
+            if after:
+                return after[:40]
+    # Fallback: take 1–2 non-stopwords
+    import re
+    words = [w for w in re.findall(r"\w+", m) if w.lower() not in STOP_WORDS]
+    return " ".join(words[:2])[:40] if words else ""
+
+def detect_intent(user_message: str) -> str:
+    m = user_message.strip().lower()
+    if re.search(r'\b(summary|summarize|recap|what.*shown)\b', m):
+        return "summary"
+    if re.search(r'\b(more|another|others|more please|more!)\b', m):
+        return "more"
+    # phrase cues that imply a topical search
+    if re.search(r'\b(do you have|about|with|featuring|related to|on)\b', m):
+        return "search"
+    # heuristic “search” cues
+    genres = {"action","comedy","drama","horror","thriller","romance","sci-fi","science fiction","fantasy","animation",
+              "crime","western","war","documentary","adventure","mystery","family"}
+    if (any(g in m for g in genres)
+        or re.search(r'\b(movie|movies|film|films|recommend|show)\b', m)
+        or re.search(r'\b(19\d0s|20\d0s|\d{4})\b', m)
+        or re.search(r'\b(director|actor|starring|by)\b', m)):
+        return "search"
+    return "off_topic"
+
+GENRE_KEYWORDS = {"action","comedy","drama","horror","thriller","romance","sci-fi","science fiction","fantasy",
+                  "animation","crime","western","war","documentary","adventure","mystery","family"}
+
+def extract_genres(message: str) -> set[str]:
+    m = message.lower()
+    return {g for g in GENRE_KEYWORDS if g in m}    
+
+def collect_shown_ids(history: list | None) -> set[int]:
+    shown = set()
+    if not history: 
+        return shown
+    for turn in history:
+        if turn.get('role') == 'model':
+            try:
+                obj = json.loads(turn['parts'][0]['text'])
+                for m in obj.get('movies', []):
+                    if 'id' in m:
+                        shown.add(m['id'])
+            except Exception:
+                continue
+    return shown
 
 PARSER_SYSTEM_INSTRUCTION = """
 You are an Intent Classification expert. Your ONLY job is to analyze the user's text and the conversation history to determine the user's primary goal.
@@ -82,7 +140,8 @@ User: "movies from the 70s"
 """
 
 CONVERSATIONALIST_SYSTEM_INSTRUCTION = """
-You are MyMDBot, a movie recommendation assistant.
+You are MyMDBot, a witty and knowledgeable movie recommendation assistant.
+Your job is to generate a friendly, conversational response based on the user's request and the context provided.
 Return only a single JSON object: {"text": "..."}.
 
 Rules:
@@ -90,6 +149,8 @@ Rules:
 - If movies_found is empty OR the user’s request is off-topic (not about movies), do NOT recommend. Politely say you can help with movie recommendations and ask a clarifying question (e.g., genre, decade, actor, or director).
 - If the user asks for “more” without new criteria, suggest clarifying what to change (e.g., “more comedies from the 90s?”). Do not repeat the same titles.
 - If the user asks to summarize what was shown, keep it brief (“We discussed X, Y, Z.”). If none, say so.
+- If special_instruction is provided, follow it strictly and do not recommend unless it says so.
+- If topic_hint is provided, reflect it in the wording (e.g., ‘…about {topic_hint}’) and vary phrasing; avoid repeating the same sentence.
 - Keep replies under ~60 words. Friendly, concise, no spoilers, no extra JSON fields.
 """
 
@@ -267,28 +328,75 @@ def _gemini_response(user_message: str, history: list = None):
         max_docs = int(os.getenv("RAG_MAX_DOCS", "500"))
         embed_model = os.getenv("RAG_EMBED_MODEL", "all-MiniLM-L6-v2")
 
-        candidate_ids = rag_index.retrieve(user_message, top_k=top_k, model_name=embed_model, max_docs=max_docs)
+        intent = detect_intent(user_message)
+        shown_ids = collect_shown_ids(history)
+        topic_hint = extract_topic_hint(user_message)
+        
+        requested_genres = extract_genres(user_message)
+        cap_genres = [g.capitalize() for g in requested_genres]  # DB genres are capitalized        
+
+        # If user said “more” but didn’t specify genres, infer from previously shown items
+        if intent == "more" and not cap_genres and shown_ids:
+            counts = Counter()
+            for m in Movie.objects.filter(id__in=shown_ids).prefetch_related("genres"):
+                for g in m.genres.all():
+                    counts[g.name] += 1
+            # Take the top 1–2 genres as the inferred preference
+            cap_genres = [name for name, _ in counts.most_common(2)]
+
         movies_to_present = []
-        if candidate_ids:
-            id_to_rank = {mid: i for i, mid in enumerate(candidate_ids)}
-            rows = list(
-                Movie.objects.filter(id__in=candidate_ids).values("id", "title", "release_year", "description")
-            )
+
+        # Always try RAG for any non-empty message, but gate by similarity
+        ids, scores = rag_index.retrieve_with_scores(user_message, top_k=top_k, model_name=embed_model, max_docs=max_docs)
+
+        logger.info(f"FAISS index size={rag_index.index_size()} retrieved={len(ids)} top_scores={scores[:3]}")
+
+        movies_to_present = []
+        min_sim = float(os.getenv("RAG_MIN_SIM", "0.25"))  # cosine on normalized vectors ∈ [-1,1]
+
+        if ids and max(scores or [0.0]) >= min_sim:
+            id_to_rank = {mid: i for i, mid in enumerate(ids)}
+            base_qs = Movie.objects.filter(id__in=ids)
+            if cap_genres:
+                base_qs = base_qs.filter(genres__name__in=cap_genres)
+            rows = list(base_qs.distinct().values("id","title","release_year","description"))
+            if intent == "more" and shown_ids:
+                rows = [r for r in rows if r["id"] not in shown_ids]
             rows.sort(key=lambda m: id_to_rank.get(m["id"], 10_000))
             movies_to_present = rows[: min(3, len(rows))]
 
-        if not movies_to_present:
+        # If user explicitly asked for search/more and RAG came up empty, try keyword fallback
+        if intent in ("search","more") and not movies_to_present:
             fallback_rows = _keyword_db_fallback(user_message, top_k=top_k)
+            if intent == "more" and shown_ids:
+                fallback_rows = [r for r in fallback_rows if r["id"] not in shown_ids]
+            if cap_genres and fallback_rows:
+                fallback_qs = Movie.objects.filter(
+                    id__in=[r["id"] for r in fallback_rows],
+                    genres__name__in=cap_genres,
+                )
+                fallback_rows = list(
+                    fallback_qs.distinct().values("id","title","release_year","description")
+                )
             if fallback_rows:
                 movies_to_present = fallback_rows[: min(3, len(fallback_rows))]
 
+        # Summary overrides: show up to 3 previously shown
+        if intent == "summary":
+            if shown_ids:
+                rows = list(
+                    Movie.objects.filter(id__in=shown_ids).values("id","title","release_year","description")
+                )
+                movies_to_present = rows[: min(3, len(rows))]
         conversational_context = {}
-        if movies_to_present:
+        if movies_to_present and intent in ("search","more","summary"):
             conversational_context["movies_found"] = movies_to_present
         else:
             conversational_context["special_instruction"] = (
-                "The user searched for movies, but none were found in the database. Inform them of this politely."
+                "The request is off-topic or vague. Ask a short clarifying question (genre, decade, actor, or director) and do not recommend yet."
             )
+        if topic_hint:
+            conversational_context["topic_hint"] = topic_hint
 
         model = genai.GenerativeModel(
             model_name='gemini-2.0-flash-lite-001',

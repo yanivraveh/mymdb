@@ -293,10 +293,34 @@ mimetypes.add_type("text/css", ".css", True)
 - `CSRF_TRUSTED_ORIGINS` includes `http://localhost:5173`.
 - Frontend sends `X-CSRFToken` on POST to `/api/chat/rooms/` (uses cookie `csrftoken`).
 
+### CHATBOT RAG UPGRADE (FAISS + local embeddings)
+- Retrieval: FAISS (RAM-only) built at process start from `Movie` rows. Embeddings via `sentence-transformers` (no API cost).
+- Generation: single Gemini call per request; no Gemini embeddings used.
+- Intent gate (rule-based): “search”, “more”, “summary”, “off_topic”. OFF-topic/vague shows a clarifying question (no recs). “more” excludes already-shown and inherits prior genres if none specified.
+- Filters: genres and year/decade recognized from the user message.
+
+Env (backend):
+- `RAG_TOP_K` (default 5): number of candidates to retrieve before filtering/sorting.
+- `RAG_MAX_DOCS` (default 500): cap movies embedded at startup.
+- `RAG_MIN_SIM` (default 0.25): min cosine similarity to accept RAG results; below → no recs (clarify instead).
+- `RAG_EMBED_MODEL` (default `all-MiniLM-L6-v2`).
+
+Local deps:
+- `faiss-cpu`, `numpy`, `sentence-transformers` (installed in venv; listed in requirements).
+
+Troubleshooting:
+- If the first request is slow in a new pod: that’s the one-time model download + FAISS build.
+- If responses feel too eager: increase `RAG_MIN_SIM` (e.g., 0.35–0.45).
+- If variety is low: raise `RAG_TOP_K` (e.g., 10–15).
+
 ### Scaling to K8s (preview)
 - Backend: 3 replicas; each pod runs the embedded broadcaster with a unique `GROUP_ID` so every pod receives every message and fans out to its own sockets (no Redis needed per course scope).
 - Persister: 1 replica deployment with `PERSIST_GROUP_ID=chat-db-writer`.
 - React: single deployment/service; expose via Ingress/LoadBalancer. Kafka can run in‑cluster or externally.
+
+K8s changes after RAG upgrade:
+- No new services or components. Only add envs to the backend Deployment:
+  - `RAG_TOP_K`, `RAG_MAX_DOCS`, `RAG_MIN_SIM`, `RAG_EMBED_MODEL`.
 
 # Appendix
 ## Key choices (to stay within course scope)

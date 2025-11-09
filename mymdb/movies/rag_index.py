@@ -16,6 +16,9 @@ _movie_ids: List[int] = []
 _embedder = None  # type: ignore
 
 
+def index_size() -> int:
+    return len(_movie_ids)
+    
 def _compose_movie_text(movie: Movie) -> str:
     genre_names = ", ".join(g.name for g in movie.genres.all())
     director_name = ""
@@ -108,4 +111,18 @@ def refresh(max_docs: int = 500, model_name: str = "all-MiniLM-L6-v2") -> None:
         _movie_ids = []
     build_index(max_docs=max_docs, model_name=model_name)
 
-
+def retrieve_with_scores(query: str, top_k: int = 5, model_name: str = "all-MiniLM-L6-v2", max_docs: int = 500):
+    global _index
+    if not _built or _index is None:
+        build_index(max_docs=max_docs, model_name=model_name)
+    if _index is None:
+        return [], []
+    embedder = _get_embedder(model_name)
+    q = embedder.encode([query], convert_to_numpy=True).astype("float32")
+    q = _l2_normalize(q)
+    k = max(1, min(top_k, len(_movie_ids)))
+    scores, idxs = _index.search(q, k)
+    order = idxs[0].tolist()
+    id_list = [_movie_ids[i] for i in order if 0 <= i < len(_movie_ids)]
+    score_list = [float(scores[0][i]) for i in range(len(order))]
+    return id_list, score_list
