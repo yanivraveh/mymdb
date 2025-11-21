@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mymdb-frontend-nginx
+data:
+  default.conf: |
+    server {
+      listen 80;
+      server_name _;
+
+      root /usr/share/nginx/html;
+      index index.html;
+
+      # React SPA routing
+      location / {
+        try_files $uri /index.html;
+      }
+
+      # Proxy REST to backend Service
+      location /api/ {
+        proxy_pass http://mymdb-backend:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+      }
+
+      # Proxy WebSockets to backend
+      location /ws/ {
+        proxy_pass http://mymdb-backend:8000/ws/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mymdb-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mymdb-frontend }
+  template:
+    metadata:
+      labels: { app: mymdb-frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: yanivraveh/mymdb-frontend:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits:   { cpu: "250m", memory: "256Mi" }
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: mymdb-frontend-nginx
+            items:
+              - key: default.conf
+                path: default.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mymdb-frontend
+spec:
+  selector: { app: mymdb-frontend }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+  type: LoadBalancer
