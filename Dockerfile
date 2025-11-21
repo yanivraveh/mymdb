@@ -15,5 +15,8 @@ COPY mymdb/ /app/mymdb/
 
 EXPOSE 8000
 
+# Run from the inner Django project dir so 'mymdb.asgi' imports cleanly
+WORKDIR /app/mymdb
+
 # Default command: Daphne ASGI server
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "mymdb.asgi:application"]

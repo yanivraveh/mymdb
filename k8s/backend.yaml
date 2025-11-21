@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mymdb-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: mymdb-backend }
+  template:
+    metadata:
+      labels: { app: mymdb-backend }
+    spec:
+      containers:
+        - name: backend
+          image: yanivraveh/mymdb-backend:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - { name: DEPLOY_ENV, value: "k8s" }
+            # Postgres (map from postgres-secret)
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_DB } }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_PASSWORD } }
+            - { name: DB_HOST, value: "postgres" }
+            - { name: DB_PORT, value: "5432" }
+            # Kafka
+            - { name: BOOTSTRAP_SERVERS, value: "kafka:9092" }
+            - { name: TOPIC_NAME, value: "chat-messages" }
+            - name: GROUP_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # RAG (defaults can be overridden here if needed)
+            - { name: RAG_TOP_K, value: "5" }
+            - { name: RAG_MAX_DOCS, value: "500" }
+            - { name: RAG_MIN_SIM, value: "0.25" }
+            - { name: RAG_EMBED_MODEL, value: "all-MiniLM-L6-v2" }
+          volumeMounts:
+            - name: media
+              mountPath: /app/mymdb/media            
+          readinessProbe:
+            httpGet: { path: "/", port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: "/", port: 8000 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "500m", memory: "1Gi" }
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: media-pvc            
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mymdb-backend
+spec:
+  selector: { app: mymdb-backend }
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: LoadBalancer

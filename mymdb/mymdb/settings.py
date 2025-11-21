@@ -105,7 +105,7 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-if DEPLOY_ENV == "prod":
+if DEPLOY_ENV in ("prod", "k8s"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",

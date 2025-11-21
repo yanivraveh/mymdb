@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mymdb-persister
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: mymdb-persister }
+  template:
+    metadata:
+      labels: { app: mymdb-persister }
+    spec:
+      containers:
+        - name: persister
+          image: yanivraveh/mymdb-backend:dev
+          imagePullPolicy: Always
+          command: ["python","manage.py","persist_kafka"]
+          env:
+            - { name: DEPLOY_ENV, value: "k8s" }
+            # Postgres
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_DB } }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: postgres-secret, key: POSTGRES_PASSWORD } }
+            - { name: DB_HOST, value: "postgres" }
+            - { name: DB_PORT, value: "5432" }
+            # Kafka
+            - { name: BOOTSTRAP_SERVERS, value: "kafka:9092" }
+            - { name: TOPIC_NAME, value: "chat-messages" }
+            - { name: PERSIST_GROUP_ID, value: "chat-db-writer" }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits:   { cpu: "250m", memory: "512Mi" }
