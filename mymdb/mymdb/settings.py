@@ -38,6 +38,8 @@ LOGOUT_REDIRECT_URL = '/login/'
 SECRET_KEY = 'django-insecure-ms&3((l=c42kp1bn^t3b@(l9=#=o3rqd)jtk)2v$=)knhn=vwj'
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+CHAT_IFRAME_SRC = os.getenv("CHAT_IFRAME_SRC", "http://localhost:5173/")
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
