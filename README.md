@@ -271,7 +271,7 @@ python manage.py persist_kafka
 ```bash
 cd chat-frontend && npm run dev
 ```
-Open MyMDB and click the blue 💬 bubble to open the chat panel (an iframe to the React app).
+Open MyMDB and click the 💬 bubble to open the chat panel (an iframe to the React app).
 
 ### Environment variables
 - `BOOTSTRAP_SERVERS=localhost:29092`
@@ -322,6 +322,103 @@ K8s changes after RAG upgrade:
 - No new services or components. Only add envs to the backend Deployment:
   - `RAG_TOP_K`, `RAG_MAX_DOCS`, `RAG_MIN_SIM`, `RAG_EMBED_MODEL`.
 
+### K8s (Minikube) Runbook
+
+- Prereqs: Docker Desktop, kubectl, minikube.
+
+1) Start cluster
+```bash
+minikube start --driver=docker --cpus=4 --memory=8192
+kubectl create namespace mymdb
+```
+
+2) Infra (Postgres, Kafka, Kafka UI)
+```bash
+kubectl apply -n mymdb -f k8s/postgres.yaml
+kubectl apply -n mymdb -f k8s/kafka.yaml
+kubectl apply -n mymdb -f k8s/kafka-ui.yaml
+kubectl rollout status -n mymdb deployment/zookeeper --timeout=180s
+kubectl rollout status -n mymdb deployment/kafka --timeout=180s
+kubectl rollout status -n mymdb deployment/postgres --timeout=180s
+# Optional UI:
+# kubectl -n mymdb port-forward svc/kafka-ui 8080:8080
+```
+
+3) Media PVC (for movie posters)
+```bash
+kubectl apply -n mymdb -f k8s/media.yaml
+```
+
+4) Build and push images (Docker Hub)
+```bash
+# backend (Daphne + Channels)
+docker build -t yanivraveh/mymdb-backend:dev .
+docker push yanivraveh/mymdb-backend:dev
+
+# frontend (React build served by Nginx)
+docker build -t yanivraveh/mymdb-frontend:dev ./chat-frontend
+docker push yanivraveh/mymdb-frontend:dev
+```
+
+5) Deploy backend (3 replicas) and persister
+```bash
+kubectl apply -n mymdb -f k8s/backend.yaml
+kubectl apply -n mymdb -f k8s/persister.yaml
+kubectl rollout status -n mymdb deployment/mymdb-backend --timeout=180s
+kubectl rollout status -n mymdb deployment/mymdb-persister --timeout=180s
+```
+
+6) Deploy frontend (Nginx)
+```bash
+kubectl apply -n mymdb -f k8s/frontend.yaml
+kubectl rollout status -n mymdb deployment/mymdb-frontend --timeout=180s
+```
+
+7) Expose LoadBalancers (Windows requires tunnel)
+```bash
+minikube tunnel    # keep this terminal open
+kubectl get svc -n mymdb mymdb-backend mymdb-frontend
+# EXTERNAL-IP will be 127.0.0.1 (backend:8000, frontend:80)
+```
+
+8) Migrate DB (run once)
+```bash
+POD=$(kubectl get pods -n mymdb -l app=mymdb-backend -o jsonpath='{.items[0].metadata.name}')
+kubectl exec -n mymdb $POD -- sh -lc "cd /app/mymdb && python manage.py migrate --noinput"
+```
+
+9) Create a superuser (for admin and import)
+```bash
+kubectl exec -n mymdb $POD -- sh -lc \
+ 'export DJANGO_SUPERUSER_USERNAME=admin DJANGO_SUPERUSER_EMAIL=admin@example.com DJANGO_SUPERUSER_PASSWORD=admin123 && python manage.py createsuperuser --noinput'
+```
+
+10) Posters (copy into the media PVC)
+```bash
+POD=$(kubectl get pods -n mymdb -l app=mymdb-backend -o jsonpath='{.items[0].metadata.name}')
+kubectl cp mymdb/media/posters $POD:/app/mymdb/media -n mymdb
+# in PowerShell use ${POD} instead of $POD
+```
+
+11) Set Gemini API key and iframe URL
+```bash
+kubectl set env -n mymdb deployment/mymdb-backend GEMINI_API_KEY="YOUR_KEY"
+# For Minikube, iframe points to frontend LB on 127.0.0.1:80
+kubectl set env -n mymdb deployment/mymdb-backend CHAT_IFRAME_SRC="http://127.0.0.1/"
+
+#Update backend
+kubectl rollout status -n mymdb deployment/mymdb-backend --timeout=180s
+```
+
+12) Seed data
+- Use Postman against `http://127.0.0.1:8000/api/import_tmdb_movies/` (file upload tmdb_movies.json), 
+
+13) Test
+- Open `http://127.0.0.1:8000/` (backend).
+
+Troubleshooting
+- Auth/CSRF: use 127.0.0.1 consistently for both frontend and backend in Minikube.
+
 # Appendix
 ## Key choices (to stay within course scope)
 
@@ -341,8 +438,8 @@ Things i am thinkging about or haven't got to them yet:
 
 * **Data Fetching**: The Jupyter notebook could be replaced with a more integrated Django management command to fetch a wider range of movie data and handle poster downloads automatically.
 * **AI Chatbot**: Missing streaming for the chatbot's responses and more tunings and tweakings are needed for the conversational instructions.
-* **AI Integration**: The current two-step AI intent parsing could be upgraded to use Gemini's native function calling for more reliable and extensible movie searches.
-* **UI/UX**: Minor user interface and experience enhancements can be implemented to improve navigation and usability.
+* **AI Integration**: Upgraded the two-step AI intent parsing to FAISS's RAG.
+* **UI/UX**: Both chats currentyly overlap each other, and other minor ui and ux enhancements can be implemented to improve navigation and usability.
 * **Project Structure**: The current project layout, with the `venv` and `requirements.txt` in the root `MyMDB` directory, is a result of the initial PyCharm setup. A future refactor could involve moving these into the `mymdb` backend directory and restructuring the root to accommodate a separate `frontend` application, creating a more conventional monorepo structure.
 ---
 Thank you for reviewing my project.
